@@ -2,7 +2,7 @@ import pyomo.environ as pyo
 from pyomo.util.model_size import build_model_size_report
 
 import numpy as np
-#import pandas
+import pandas as pd
 
 import matplotlib.pyplot as plt
 
@@ -61,11 +61,11 @@ local_load = np.random.rand(len(model.Q))
 
 
 ## Main trading decision variables
-model.ID_buy = pyo.Var(model.Q, within=pyo.PositiveReals)
-model.ID_sell = pyo.Var(model.Q, within=pyo.PositiveReals)
+model.ID_buy = pyo.Var(model.Q, within=pyo.PositiveReals, bounds = (0,100))
+model.ID_sell = pyo.Var(model.Q, within=pyo.PositiveReals, bounds = (0,100))
 
-model.DA_buy = pyo.Var(model.H, within=pyo.PositiveReals)
-model.DA_sell = pyo.Var(model.H, within=pyo.PositiveReals)
+model.DA_buy = pyo.Var(model.H, within=pyo.PositiveReals, bounds = (0,100))
+model.DA_sell = pyo.Var(model.H, within=pyo.PositiveReals, bounds = (0,100))
 
 model.PCR = pyo.Var(model.H4, within=pyo.PositiveReals)
 
@@ -78,10 +78,10 @@ model.peak = pyo.Var(model.Q, within=pyo.PositiveReals)
 
 # Decision flows in and out of components
 #model.x_grid_in = pyo.Var(model.Q, within=pyo.PositiveReals)
-model.x_grid_out = pyo.Var(model.Q, within=pyo.Reals)#, bounds = (-1,1))
+model.x_grid_out = pyo.Var(model.Q, within=pyo.Reals)#, bounds = (-0.1,0.1))
 
-model.x_BESS_in = pyo.Var(model.Q, within=pyo.PositiveReals)#, bounds = (0,0.5))
-model.x_BESS_out = pyo.Var(model.Q, within=pyo.PositiveReals)#, bounds = (0,0.5))
+model.x_BESS_in = pyo.Var(model.Q, within=pyo.PositiveReals)#, bounds = (0,1))
+model.x_BESS_out = pyo.Var(model.Q, within=pyo.PositiveReals)#, bounds = (0,1))
 
 # model.x_supercap_in = pyo.Var(model.Q, within=pyo.PositiveReals)
 # model.x_supercap_out = pyo.Var(model.Q, within=pyo.PositiveReals)
@@ -94,18 +94,57 @@ model.SOC_BESS = pyo.Var(model.Q, within=pyo.PositiveReals)
 model.node_in = pyo.Constraint(model.Q, rule = lambda model, q: 0 == PV_prod[q] - local_load[q]  + model.x_grid_out[q] + model.x_BESS_out[q] - model.x_BESS_in[q]) # + model.x_supercap_out[q] - model.x_supercap_in[q])
 #model.node_out = pyo.Constraint(model.Q, rule = lambda model, q: 0 == PV_prod[q] - local_load[q] + model.x_grid_out[q])# + model.x_BESS_out[q] - model.x_BESS_in[q] ) # + model.x_supercap_out[q] - model.x_supercap_in[q])
 
+# Financial balancing: net power from grid must be equal to aggregated trades on both markets. DA is hourly, so divided by 4.
 model.balancing_in = pyo.Constraint(model.Q, rule = lambda model, q: model.x_grid_out[q] == model.ID_buy[q] - model.ID_sell[q] + model.DA_buy[q//4]/4 - model.DA_sell[q//4]/4)
-#model.balancing_in = pyo.Constraint(model.Q, rule = lambda model, q: model.x_grid_out[q] == model.ID_buy[q] - model.ID_sell[q])# + model.DA_buy[q//4]/4)
-#model.balancing_out = pyo.Constraint(model.Q, rule = lambda model, q: model.x_grid_in[q] == model.ID_sell[q])# + model.DA_sell[q//4]/4)
-# Big M constraints for AD_buy // ID_sell, DA_buy // ID_sell
 
 
+# Big M constraint for simulaneous buying and selling:
+# Buying and selling simultaneously is not allowed: (ID_buy + DA_buy)*(ID_sell + DA_sell) = 0)
+# 
 model.y = pyo.Var(model.Q, within=pyo.Binary)#, bounds = (-1,1))
-
 M = 1000
 model.const_bigM_ID_sell = pyo.Constraint(model.Q, rule = lambda model, q: (model.ID_sell[q] + model.DA_sell[q//4]/4) <= M*model.y[q])
 model.const_bigM_ID_buy = pyo.Constraint(model.Q, rule = lambda model, q: (model.ID_buy[q] + model.DA_buy[q//4]/4) <= M*(1-model.y[q]))
 
+# Alternative big M constraint
+# Difference between buying and selling simultaneously must be bigger than certain value: (ID_buy + DA_buy)*(ID_sell + DA_sell) = 0)
+# OR, for every hour where we buy and sell simultaneously, we must also buy and buy simultaneously
+# OR, for every hour sum of ID_buy must aggregate to 0
+
+# model.const_bigM_alt = pyo.Constraint(model.H, rule = lambda model, h:  sum(model.ID_sell[4*h + k] - model.ID_buy[4*h + k] for k in range(0,4)) == 0 )
+
+# M = 1000 
+
+# Either ID buy or ID sell
+# model.y = pyo.Var(model.Q, within=pyo.Binary)#, bounds = (-1,1))
+# model.const_bigM_ID1_sell = pyo.Constraint(model.Q, rule = lambda model, q: (model.ID_sell[q]<= M*model.y[q]))
+# model.const_bigM_ID1_buy = pyo.Constraint(model.Q, rule = lambda model, q: (model.ID_buy[q] <= M*(1-model.y[q])))
+
+# Either DA buy or DA sell
+# model.y1 = pyo.Var(model.Q, within=pyo.Binary)#, bounds = (-1,1))
+# model.const_bigM_DA1_sell = pyo.Constraint(model.Q, rule = lambda model, q: (model.DA_sell[q//4]<= M*model.y1[q//4]))
+# model.const_bigM_DA1_buy = pyo.Constraint(model.Q, rule = lambda model, q: (model.DA_buy[q//4] <= M*(1-model.y1[q//4])))
+
+# Other alternative big M constraint
+# For each hour q0 and q3 must be opposite sign
+# M = 1000 
+# model.y2 = pyo.Var(model.H, within=pyo.Binary)#, bounds = (-1,1))
+
+# model.const_bigM_altq01 = pyo.Constraint(model.H, rule = lambda model, h:  model.ID_sell[4*h] - model.ID_buy[4*h] <= M*model.y2[h])
+# model.const_bigM_altq02 = pyo.Constraint(model.H, rule = lambda model, h:  model.ID_sell[4*h] - model.ID_buy[4*h] >= -1* M*(1-model.y2[h]))
+
+# model.const_bigM_altq31 = pyo.Constraint(model.H, rule = lambda model, h:  model.ID_sell[4*h + 3] - model.ID_buy[4*h + 3] >= -1*M*model.y2[h])
+# model.const_bigM_altq32 = pyo.Constraint(model.H, rule = lambda model, h:  model.ID_sell[4*h + 3] - model.ID_buy[4*h + 3] <=  M*(1-model.y2[h]))
+
+# # # Either ID buy or ID sell
+# model.y = pyo.Var(model.Q, within=pyo.Binary)#, bounds = (-1,1))
+# model.const_bigM_ID1_sell = pyo.Constraint(model.Q, rule = lambda model, q: (model.ID_sell[q]<= M*model.y[q]))
+# model.const_bigM_ID1_buy = pyo.Constraint(model.Q, rule = lambda model, q: (model.ID_buy[q] <= M*(1-model.y[q])))
+
+# # Either DA buy or DA sell
+# model.y1 = pyo.Var(model.Q, within=pyo.Binary)#, bounds = (-1,1))
+# model.const_bigM_DA1_sell = pyo.Constraint(model.Q, rule = lambda model, q: (model.DA_sell[q//4]<= M*model.y1[q//4]))
+# model.const_bigM_DA1_buy = pyo.Constraint(model.Q, rule = lambda model, q: (model.DA_buy[q//4] <= M*(1-model.y1[q//4])))
 
 
 # Storage continuity
@@ -169,8 +208,6 @@ model.const_dq_dsh = pyo.Constraint(model.Q, rule = const_dq_dsh)
 deg_total = sum(model.dq[q] for q in model.Q)
 
 
-
-
 def obj_expression(model):
     return pyo.sum_product(model.ID_buy, pricesQ, index=model.ID_buy) \
           - pyo.sum_product(model.ID_sell, pricesQ, index=model.ID_buy)\
@@ -184,23 +221,20 @@ options = {
     "MIPGap":  0.01,
     "OutputFlag": 1
 }
+
 results = solver.solve(model,tee=True, options = options)
-
-print(results)
-report = build_model_size_report(model)
-print(report.activated.variables)
-
-# print(report.activated.constraints)
-
-# Buy and sell volumes
-
+print('Obj for exclusive buy/sell: '+ str(results['Problem'][0]['Lower bound']))
 print('DA_buy: '+ str(sum(model.DA_buy.extract_values().values())))
 print('DA_sell: '+ str(sum(model.DA_sell.extract_values().values())))
 
 print('ID_buy: '+ str(sum(model.ID_buy.extract_values().values())))
 print('ID_sell: '+ str(sum(model.ID_sell.extract_values().values())))
 
+print('Abs SOC change: ' + str(sum(abs(model.SOC_BESS.extract_values()[q] - model.SOC_BESS.extract_values()[q-1]) for q in model.Q if q > 0)))
+
 # plt.plot(model.SOC_BESS.extract_values().values())
 # plt.show()
 # print('done')
 # print(model.obj())
+
+# pd.DataFrame(model.ID_buy.extract_values())
