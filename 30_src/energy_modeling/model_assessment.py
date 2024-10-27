@@ -218,7 +218,7 @@ model.obj = pyo.Objective(rule = obj_expression, sense = pyo.minimize)
 solver = pyo.SolverFactory('gurobi') 
 
 options = {
-    "MIPGap":  0.01,
+    "MIPGap":  0.0001,
     "OutputFlag": 1
 }
 

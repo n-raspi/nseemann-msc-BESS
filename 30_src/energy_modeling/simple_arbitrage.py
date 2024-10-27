@@ -1,4 +1,5 @@
 import pyomo.environ as pyo
+from pyomo.util.model_size import build_model_size_report
 
 prices = [10,3,4,2,5,67,4,3,2,6,4,90,10,3,4,2,5,67,4,3,2,6,4,90]
 
@@ -46,13 +47,20 @@ def obj_expression(model):
     return sum(prices[h] * model.trade[h] for h in model.hours)
 model.obj = pyo.Objective(rule=obj_expression, sense=pyo.maximize)
 
+# Report the size of the model
+report = build_model_size_report(model)
+print(report.activated.variables)
+print(report.activated.constraints)
+
+
 # Solve the model
 solver = pyo.SolverFactory('glpk')
 solver.solve(model)
+print(model.SOC.extract_values())
 
-# Print the results
-print(f"trades = {list(model.trade.extract_values().values())}")
-print(f"SOC = {list(model.SOC.extract_values().values())}")
-print(f"Objective = {model.obj()}")
-print(model.obj())
+# # Print the results
+# print(f"trades = {list(model.trade.extract_values().values())}")
+# print(f"SOC = {list(model.SOC.extract_values().values())}")
+# print(f"Objective = {model.obj()}")
+# print(model.obj())
 
