@@ -6,6 +6,16 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
+# import os
+# print(os.getcwd())
+
+from import_data import import_data
+# combined_market_data = pd.read_csv('30_src/build_dataset/combined_market_data.csv', index_col=0, parse_dates=True)#, date_parser=date_parser)
+
+IP, DA = import_data()
+IP = IP.to_list()
+DA = DA.to_list()
+
 # Needed data to import:
 # - DA prices
 # - ID prices
@@ -24,10 +34,10 @@ model.H4 = pyo.RangeSet(0, N_days*6-1)
 ## Market prices
 
 # ID prices
-pricesQ = 100*np.random.rand(len(model.Q))
+pricesQ = IP[0:len(model.Q)]
 
 # DA prices
-pricesH = 100*np.random.rand(len(model.H))
+pricesH = DA[0:len(model.H)]
 
 # PCR prices
 pricesH4_PCR = np.random.rand(len(model.H4))
@@ -47,22 +57,25 @@ emissions = np.random.rand(len(model.Q))
 ## System data
 
 # Efficiency
-e_BESS = 1 # Battery efficiency
+e_BESS = 0.9 # Battery efficiency
 SD_BESS = 0.01 # Self discharge rate of battery in %/quarter-hour
 
 BESS_capacity = 1 # MWh
-BESS_c_rate = 1 # C-rate of battery
+BESS_c_rate = 0.5 # C-rate of battery
 
 # PV prod
-PV_prod = np.random.rand(len(model.Q))
+PV_prod = np.zeros(len(model.Q)) #random.rand(len(model.Q))
 
 # Local load
-local_load = np.random.rand(len(model.Q))
+local_load = np.zeros(len(model.Q)) #np.random.rand(len(model.Q))
 
 
 ## Main trading decision variables
 model.ID_buy = pyo.Var(model.Q, within=pyo.PositiveReals, bounds = (0,100))
 model.ID_sell = pyo.Var(model.Q, within=pyo.PositiveReals, bounds = (0,100))
+print(model.Q)
+print(len(pricesQ))
+pyo.sum_product(model.ID_buy, pricesQ, index=model.ID_buy)
 
 model.DA_buy = pyo.Var(model.H, within=pyo.PositiveReals, bounds = (0,100))
 model.DA_sell = pyo.Var(model.H, within=pyo.PositiveReals, bounds = (0,100))
@@ -113,7 +126,7 @@ model.const_bigM_ID_buy = pyo.Constraint(model.Q, rule = lambda model, q: (model
 
 # model.const_bigM_alt = pyo.Constraint(model.H, rule = lambda model, h:  sum(model.ID_sell[4*h + k] - model.ID_buy[4*h + k] for k in range(0,4)) == 0 )
 
-# M = 1000 
+# M = 1000  
 
 # Either ID buy or ID sell
 # model.y = pyo.Var(model.Q, within=pyo.Binary)#, bounds = (-1,1))
@@ -150,7 +163,9 @@ model.const_bigM_ID_buy = pyo.Constraint(model.Q, rule = lambda model, q: (model
 # Storage continuity
 def const_SOC_BESS(model, q):
     if q == 0:
-        return model.SOC_BESS[q] == 0.5
+        return model.SOC_BESS[q] == BESS_capacity/2
+    if q == len(model.Q)-1:
+        return model.SOC_BESS[q] == BESS_capacity/2
     else:
         return model.SOC_BESS[q] == (1-SD_BESS)*(model.SOC_BESS[q-1] + (e_BESS*(model.x_BESS_in[q])) - ((1/e_BESS)*model.x_BESS_out[q]))
 model.BESS_cont = pyo.Constraint(model.Q, rule = const_SOC_BESS)
@@ -218,12 +233,12 @@ model.obj = pyo.Objective(rule = obj_expression, sense = pyo.minimize)
 solver = pyo.SolverFactory('gurobi') 
 
 options = {
-    "MIPGap":  0.0001,
+    "MIPGap":  0.005,
     "OutputFlag": 1
 }
 
 results = solver.solve(model,tee=True, options = options)
-print('Obj for exclusive buy/sell: '+ str(results['Problem'][0]['Lower bound']))
+print('Obj for exclusive buy/sell: '+ str(results['Problem'][0]['Upper bound']))
 print('DA_buy: '+ str(sum(model.DA_buy.extract_values().values())))
 print('DA_sell: '+ str(sum(model.DA_sell.extract_values().values())))
 
@@ -232,6 +247,9 @@ print('ID_sell: '+ str(sum(model.ID_sell.extract_values().values())))
 
 print('Abs SOC change: ' + str(sum(abs(model.SOC_BESS.extract_values()[q] - model.SOC_BESS.extract_values()[q-1]) for q in model.Q if q > 0)))
 
+
+SOC = list(model.SOC_BESS.extract_values().values())
+print(SOC[0], SOC[-1])
 # plt.plot(model.SOC_BESS.extract_values().values())
 # plt.show()
 # print('done')
