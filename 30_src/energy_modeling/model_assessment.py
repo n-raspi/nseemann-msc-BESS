@@ -28,43 +28,45 @@ aFRRneg_p = aFRR_p['aFRRneg_SMARD_15min_pP'].to_list()
 # - aFRR capacity prices
 # - aFRR activation prices
 
-model = pyo.ConcreteModel()
+
 
 N_days = 3
 N_days_fix = 1
 day = 0
 
 
-model.Q = pyo.RangeSet(0, N_days*24*4-1)
-model.H = pyo.RangeSet(0, N_days*24-1)
-model.H4 = pyo.RangeSet(0, N_days*6-1)
 
-def run_model(day, start_SOC):
 
-    shiftQ = day*24*4 
-    shiftH = day*24
-    shiftH4 = day*6 
+def define_model():
+    model = pyo.AbstractModel()
 
-    # ID prices
-    pricesQ = IP_p[shiftQ:shiftQ+len(model.Q)]
+    model.Q = pyo.RangeSet(0, N_days*24*4-1)
+    model.H = pyo.RangeSet(0, N_days*24-1)
+    model.H4 = pyo.RangeSet(0, N_days*6-1)  
+    # parameters to define and instantiate:
+     # ID prices
+    model.pricesQ = pyo.Param(model.Q, mutable=True)
 
     # DA prices
-    pricesH = DA_p[shiftH:shiftH+len(model.H)]
+    model.pricesH = pyo.Param(model.H, mutable=True)
 
     # PCR prices
-    pricesH4_PCR = PCR_p[shiftH4:shiftH4+len(model.H4)]
+    model.pricesH4_PCR = pyo.Param(model.H4, mutable=True)
 
     #  aFRR_pos capacity prices
-    pricesH4_aFRR_pos = aFRRpos_p[shiftH4:shiftH4+len(model.H4)]
+    model.pricesH4_aFRR_pos = pyo.Param(model.H4, mutable=True)
 
     #  aFRR_neg capacity prices
-    pricesH4_aFRR_neg = aFRRneg_p[shiftH4:shiftH4+len(model.H4)]
+    model.pricesH4_aFRR_neg = pyo.Param(model.H4, mutable=True)
 
-    # Peak prices
-    p_peak = np.random.rand(1)
+    # # Peak prices
+    # model.p_peak = pyo.Param()
 
-    # Emissions
-    emissions = np.random.rand(len(model.Q))
+    # # Emissions
+    # model.emissions = pyo.Param(model.Q)
+
+    # Start and end SOC
+    model.start_SOC = pyo.Param(mutable=True)
 
     ## System data
 
@@ -85,9 +87,8 @@ def run_model(day, start_SOC):
     ## Main trading decision variables
     model.ID_buy = pyo.Var(model.Q, within=pyo.PositiveReals, bounds = (0,100))
     model.ID_sell = pyo.Var(model.Q, within=pyo.PositiveReals, bounds = (0,100))
-    print(model.Q)
-    print(len(pricesQ))
-    pyo.sum_product(model.ID_buy, pricesQ, index=model.ID_buy)
+  
+    pyo.sum_product(model.ID_buy, model.pricesQ, index=model.ID_buy)
 
     model.DA_buy = pyo.Var(model.H, within=pyo.PositiveReals, bounds = (0,100))
     model.DA_sell = pyo.Var(model.H, within=pyo.PositiveReals, bounds = (0,100))
@@ -97,7 +98,7 @@ def run_model(day, start_SOC):
     model.aFRR_pos = pyo.Var(model.H4, within=pyo.PositiveReals)#, initialize = 0)
     model.aFRR_neg = pyo.Var(model.H4, within=pyo.PositiveReals)#, initialize = 0)
 
-    model.peak = pyo.Var(model.Q, within=pyo.PositiveReals)
+    # model.peak = pyo.Var(model.Q, within=pyo.PositiveReals)
 
     ## Supporting decision variables
 
@@ -131,12 +132,14 @@ def run_model(day, start_SOC):
     # Storage continuity
     def const_SOC_BESS(model, q):
         if q == 0:
-            return model.SOC_BESS[q] == (1-SD_BESS)*(start_SOC + (e_BESS*(model.x_BESS_in[q])) - ((1/e_BESS)*model.x_BESS_out[q]))
+            return model.SOC_BESS[q] == (1-SD_BESS)*(model.start_SOC + (e_BESS*(model.x_BESS_in[q])) - ((1/e_BESS)*model.x_BESS_out[q]))
         else:
             return model.SOC_BESS[q] == (1-SD_BESS)*(model.SOC_BESS[q-1] + (e_BESS*(model.x_BESS_in[q])) - ((1/e_BESS)*model.x_BESS_out[q]))
     model.BESS_cont = pyo.Constraint(model.Q, rule = const_SOC_BESS)
 
-    model.SOC_BESS_end = pyo.Constraint(rule = model.SOC_BESS[len(model.Q)-1] == start_SOC)
+    def end_SOC_BESS(model):
+        return model.SOC_BESS[len(model.Q)-1] == model.start_SOC
+    model.SOC_BESS_end = pyo.Constraint(rule = end_SOC_BESS)
 
     # BESS power
     model.const_BESS_power_in = pyo.Constraint(model.Q, rule = lambda model, q: model.x_BESS_in[q] <= 0.5)# BESS_c_rate*BESS_capacity)
@@ -152,7 +155,7 @@ def run_model(day, start_SOC):
     model.const_SOC_BESS_max_reg = pyo.Constraint(model.Q, rule = lambda model, q: model.SOC_BESS[q] <= BESS_capacity - model.aFRR_neg[q//16]*1 - model.PCR[q//16]*0.5)
 
     # Peak constraint
-    model.const_peak = pyo.Constraint(model.Q, rule = lambda model, q: model.peak[q] >= -1*model.x_grid_out[q])
+    # model.const_peak = pyo.Constraint(model.Q, rule = lambda model, q: model.peak[q] >= -1*model.x_grid_out[q])
 
     # Degradation here the constants, variables and constraints are defined together
     # n=5 # Number of segments
@@ -186,61 +189,21 @@ def run_model(day, start_SOC):
     # model.const_dq_dsh = pyo.Constraint(model.Q, rule = const_dq_dsh)
 
     # deg_total = sum(model.dq[q] for q in model.Q)
-
+    
 
     def obj_expression(model):
-        return pyo.sum_product(model.ID_buy, pricesQ, index=model.ID_buy) \
-            - pyo.sum_product(model.ID_sell, pricesQ, index=model.ID_buy)\
-            + pyo.sum_product(model.DA_buy, pricesH, index=model.DA_buy)\
-            - pyo.sum_product(model.DA_sell, pricesH, index=model.DA_buy)\
-            - pyo.sum_product(model.aFRR_pos, pricesH4_aFRR_pos, index=model.aFRR_pos)\
-            - pyo.sum_product(model.aFRR_neg, pricesH4_aFRR_neg, index=model.aFRR_neg)\
-            - pyo.sum_product(model.PCR, pricesH4_PCR, index=model.PCR)  #  + pyo.sum_product(model.peak[q], p_peak) + pyo.sum_product(model.dq[q], emissions[q])
+        return pyo.sum_product(model.ID_buy, model.pricesQ, index=model.ID_buy) \
+            - pyo.sum_product(model.ID_sell, model.pricesQ, index=model.ID_buy)\
+            + pyo.sum_product(model.DA_buy, model.pricesH, index=model.DA_buy)\
+            - pyo.sum_product(model.DA_sell, model.pricesH, index=model.DA_buy)\
+            - pyo.sum_product(model.aFRR_pos, model.pricesH4_aFRR_pos, index=model.aFRR_pos)\
+            - pyo.sum_product(model.aFRR_neg, model.pricesH4_aFRR_neg, index=model.aFRR_neg)\
+            - pyo.sum_product(model.PCR, model.pricesH4_PCR, index=model.PCR)  #  + pyo.sum_product(model.peak[q], p_peak) + pyo.sum_product(model.dq[q], emissions[q])
 
     model.obj = pyo.Objective(rule = obj_expression, sense = pyo.minimize)
-    solver = pyo.SolverFactory('gurobi') 
 
-    options = {
-        "MIPGap":  0.05,
-        "OutputFlag": 1
-    }
-
-    results = solver.solve(model,tee=True, options = options)
-
-    def get_list(pyomo_var):
-        return list(pyomo_var.extract_values().values())
-
-
-    ################## Return results for next run ##################
-
-    SOC_end = get_list(model.SOC_BESS)[-1]
-
-    outputQ = pd.DataFrame({
-        'ID_buy': get_list(model.ID_buy),
-        'ID_sell': get_list(model.ID_sell),
-        'SOC_BESS': get_list(model.SOC_BESS),
-        'x_grid_out': get_list(model.x_grid_out),
-        'x_BESS_in': get_list(model.x_BESS_in),
-        'x_BESS_out': get_list(model.x_BESS_out),
-        'priceQ': pricesQ
-    })
-
-    outputH = pd.DataFrame({
-        'DA_buy': get_list(model.DA_buy),
-        'DA_sell': get_list(model.DA_sell),
-        'priceH': pricesH
-    })
-
-    outputH4 = pd.DataFrame({
-        'PCR': get_list(model.PCR),
-        'aFRR_pos': get_list(model.aFRR_pos),
-        'aFRR_neg': get_list(model.aFRR_neg),
-        'priceH4_PCR': pricesH4_PCR,
-        'priceH4_aFRR_pos': pricesH4_aFRR_pos,
-        'priceH4_aFRR_neg': pricesH4_aFRR_neg
-    })
-
-    return outputQ, outputH, outputH4
+    return model
+    
 
 
     # print('Obj for exclusive buy/sell: '+ str(results['Problem'][0]['Upper bound']))
@@ -262,6 +225,122 @@ def run_model(day, start_SOC):
 
     # pd.DataFrame(model.ID_buy.extract_values())
 
-output = run_model(0,0.5)
-# print(output[0].model.SOC_BESS[N_days_fix*24*4-1])
-output = run_model(1,output[0]['SOC_BESS'].iloc[N_days_fix*24*4-1])
+def define_instance(model):
+    # def run_model(day, start_SOC):
+    shiftQ = day*24*4 
+    shiftH = day*24
+    shiftH4 = day*6 
+    instance = model.create_instance(
+        data = {None:{
+            'pricesQ': dict(zip(model.Q, [IP_p[shiftQ+q] for q in model.Q])),
+            'pricesH': dict(zip(model.H, [DA_p[shiftH+h] for h in model.H])),
+            'pricesH4_PCR': dict(zip(model.H4, [PCR_p[shiftH4+h] for h in model.H4])),
+            'pricesH4_aFRR_pos': dict(zip(model.H4, [aFRRpos_p[shiftH4+h] for h in model.H4])),
+            'pricesH4_aFRR_neg': dict(zip(model.H4, [aFRRneg_p[shiftH4+h] for h in model.H4])),
+            'start_SOC': {None: 0.5}
+            }
+        }
+    )
+    return instance
+    
+
+
+def modif_instance(instance, start_SOC, day):
+    shiftQ = day*24*4 
+    shiftH = day*24
+    shiftH4 = day*6 
+    instance.start_SOC = start_SOC
+    instance.pricesQ = dict(zip(model.Q, [IP_p[shiftQ+q] for q in model.Q]))
+    instance.pricesH = dict(zip(model.H, [DA_p[shiftH+h] for h in model.H]))
+    instance.pricesH4_PCR = dict(zip(model.H4, [PCR_p[shiftH4+h] for h in model.H4]))
+    instance.pricesH4_aFRR_pos = dict(zip(model.H4, [aFRRpos_p[shiftH4+h] for h in model.H4]))
+    instance.pricesH4_aFRR_neg = dict(zip(model.H4, [aFRRneg_p[shiftH4+h] for h in model.H4]))
+    return instance
+
+model = define_model()
+instance = define_instance(model)
+
+
+solver = pyo.SolverFactory('gurobi') 
+
+options = {
+    "MIPGap":  0.05,
+    "OutputFlag": 1
+}
+
+results = solver.solve(instance,tee=True, options = options)
+
+
+# # ID prices
+# instance.pricesQ = IP_p[shiftQ:shiftQ+len(model.Q)]
+
+# # DA prices
+# instance.pricesH = DA_p[shiftH:shiftH+len(model.H)]
+
+# # PCR prices
+# instance.pricesH4_PCR = PCR_p[shiftH4:shiftH4+len(model.H4)]
+
+# #  aFRR_pos capacity prices
+# instance.pricesH4_aFRR_pos = aFRRpos_p[shiftH4:shiftH4+len(model.H4)]
+
+# #  aFRR_neg capacity prices
+# instance.pricesH4_aFRR_neg = aFRRneg_p[shiftH4:shiftH4+len(model.H4)]
+
+# # # Peak prices
+# # instance.p_peak = np.random.rand(1)
+
+# # Emissions
+# instance.emissions = np.random.rand(len(model.Q))
+
+
+
+
+
+    
+
+
+def results():
+    results = solver.solve(model,tee=True, options = options)
+
+    def get_list(pyomo_var):
+        return list(pyomo_var.extract_values().values())
+
+
+    ################## Return results for next run ##################
+
+    SOC_end = get_list(model.SOC_BESS)[-1]
+
+    outputQ = pd.DataFrame({
+        'ID_buy': get_list(model.ID_buy),
+        'ID_sell': get_list(model.ID_sell),
+        'SOC_BESS': get_list(model.SOC_BESS),
+        'x_grid_out': get_list(model.x_grid_out),
+        'x_BESS_in': get_list(model.x_BESS_in),
+        'x_BESS_out': get_list(model.x_BESS_out),
+        'priceQ': model.pricesQ
+    })
+
+    outputH = pd.DataFrame({
+        'DA_buy': get_list(model.DA_buy),
+        'DA_sell': get_list(model.DA_sell),
+        'priceH': model.pricesH
+    })
+
+    outputH4 = pd.DataFrame({
+        'PCR': get_list(model.PCR),
+        'aFRR_pos': get_list(model.aFRR_pos),
+        'aFRR_neg': get_list(model.aFRR_neg),
+        'priceH4_PCR': model.pricesH4_PCR,
+        'priceH4_aFRR_pos': model.pricesH4_aFRR_pos,
+        'priceH4_aFRR_neg': model.pricesH4_aFRR_neg
+    })
+
+    return outputQ, outputH, outputH4
+
+
+
+
+
+# output = run_model(0,0.5)
+# # print(output[0].model.SOC_BESS[N_days_fix*24*4-1])
+# output = run_model(1,output[0]['SOC_BESS'].iloc[N_days_fix*24*4-1])
