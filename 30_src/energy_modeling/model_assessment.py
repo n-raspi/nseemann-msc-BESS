@@ -11,9 +11,12 @@ import matplotlib.pyplot as plt
 
 from import_data import import_data
 # combined_market_data = pd.read_csv('30_src/build_dataset/combined_market_data.csv', index_col=0, parse_dates=True)#, date_parser=date_parser)
-start_date = pd.to_datetime('2022.06.01')
+
 
 IP_p, DA_p, aFRR_p, PCR_p = import_data()
+
+start_datetime = min(IP_p.index)
+print(start_datetime)
 
 # ## Market prices
 IP_p = IP_p.to_list()
@@ -29,12 +32,34 @@ aFRRneg_p = aFRR_p['aFRRneg_SMARD_15min_pP'].to_list()
 # - aFRR activation prices
 
 
-
 N_days = 3
 N_days_fix = 1
 day = 0
 
+outputQ = pd.DataFrame(columns=[
+        'ID_buy',
+        'ID_sell',
+        'SOC_BESS',
+        'x_grid_out',
+        'x_BESS_in',
+        'x_BESS_out',
+        'priceQ'
+])
 
+outputH = pd.DataFrame(columns=[
+    'DA_buy',
+    'DA_sell',
+    'priceH'
+])
+
+outputH4 = pd.DataFrame(columns=[
+    'PCR',
+    'aFRR_pos',
+    'aFRR_neg',
+    'priceH4_PCR',
+    'priceH4_aFRR_pos',
+    'priceH4_aFRR_neg'
+])
 
 
 def define_model():
@@ -244,31 +269,83 @@ def define_instance(model):
     return instance
     
 
+def get_list(pyomo_var):
+        return list(pyomo_var.extract_values().values())
 
-def modif_instance(instance, start_SOC, day):
+def run_instance(instance, start_SOC, day):
     shiftQ = day*24*4 
     shiftH = day*24
     shiftH4 = day*6 
     instance.start_SOC = start_SOC
-    instance.pricesQ = dict(zip(model.Q, [IP_p[shiftQ+q] for q in model.Q]))
-    instance.pricesH = dict(zip(model.H, [DA_p[shiftH+h] for h in model.H]))
-    instance.pricesH4_PCR = dict(zip(model.H4, [PCR_p[shiftH4+h] for h in model.H4]))
-    instance.pricesH4_aFRR_pos = dict(zip(model.H4, [aFRRpos_p[shiftH4+h] for h in model.H4]))
-    instance.pricesH4_aFRR_neg = dict(zip(model.H4, [aFRRneg_p[shiftH4+h] for h in model.H4]))
-    return instance
+
+    for q in instance.Q:
+        instance.pricesQ[q] = IP_p[shiftQ + q]
+    for h in instance.H:
+        instance.pricesH[h] = DA_p[shiftH + h]
+    for h4 in instance.H4:
+        instance.pricesH4_PCR[h4] = PCR_p[shiftH4 + h4]
+        instance.pricesH4_aFRR_pos[h4] = aFRRpos_p[shiftH4 + h4]
+        instance.pricesH4_aFRR_neg[h4] = aFRRneg_p[shiftH4 + h4]
+    
+    # instance.pricesQ = dict(zip(instance.Q, [IP_p[shiftQ+q] for q in instance.Q]))
+    # instance.pricesH = dict(zip(instance.H, [DA_p[shiftH+h] for h in instance.H]))
+    # instance.pricesH4_PCR = dict(zip(instance.H4, [PCR_p[shiftH4+h] for h in instance.H4]))
+    # instance.pricesH4_aFRR_pos = dict(zip(instance.H4, [aFRRpos_p[shiftH4+h] for h in instance.H4]))
+    # instance.pricesH4_aFRR_neg = dict(zip(instance.H4, [aFRRneg_p[shiftH4+h] for h in instance.H4]))
+    
+    solver = pyo.SolverFactory('gurobi') 
+    
+    options = {
+        "MIPGap":  0.05,
+        "OutputFlag": 1
+    }
+    solver.solve(instance,tee=True, options = options)
+    
+    # SOC_end = get_list(instance.SOC_BESS)[-1]
+
+    outputQ = pd.DataFrame({
+        'ID_buy': get_list(instance.ID_buy),
+        'ID_sell': get_list(instance.ID_sell),
+        'SOC_BESS': get_list(instance.SOC_BESS),
+        'x_grid_out': get_list(instance.x_grid_out),
+        'x_BESS_in': get_list(instance.x_BESS_in),
+        'x_BESS_out': get_list(instance.x_BESS_out),
+        'priceQ': get_list(instance.pricesQ)
+    })
+
+    outputH = pd.DataFrame({
+        'DA_buy': get_list(instance.DA_buy),
+        'DA_sell': get_list(instance.DA_sell),
+        'priceH': get_list(instance.pricesH)
+    })
+
+    outputH4 = pd.DataFrame({
+        'PCR': get_list(instance.PCR),
+        'aFRR_pos': get_list(instance.aFRR_pos),
+        'aFRR_neg': get_list(instance.aFRR_neg),
+        'priceH4_PCR': get_list(instance.pricesH4_PCR),
+        'priceH4_aFRR_pos': get_list(instance.pricesH4_aFRR_pos),
+        'priceH4_aFRR_neg': get_list(instance.pricesH4_aFRR_neg)
+    })
+
+    return outputQ, outputH, outputH4
+
 
 model = define_model()
 instance = define_instance(model)
 
+# outputQ, outputH, outputH4
 
-solver = pyo.SolverFactory('gurobi') 
+outputQ, outputH, outputH4 = run_instance(instance, 0.5,0)
+indexQ = [start_datetime + day*pd.to_timedelta('1day') + i*pd.to_timedelta('15min') for i in range(N_days*24*4)]
+indexH = [start_datetime + day*pd.to_timedelta('1day') + i*pd.to_timedelta('1h') for i in range(N_days*24)]
+indexH4 = [start_datetime + day*pd.to_timedelta('1day') + i*pd.to_timedelta('4h') for i in range(N_days*6)]
+outputQ.index = indexQ
+outputH.index = indexH
+outputH4.index = indexH4
 
-options = {
-    "MIPGap":  0.05,
-    "OutputFlag": 1
-}
-
-results = solver.solve(instance,tee=True, options = options)
+output_window = pd.concat([outputQ,outputH,outputH4], axis=1)[start_datetime:start_datetime + N_days_fix*pd.to_timedelta('1day')-pd.to_timedelta('15min')]
+df = pd.DataFrame()
 
 
 # # ID prices
@@ -293,49 +370,6 @@ results = solver.solve(instance,tee=True, options = options)
 # instance.emissions = np.random.rand(len(model.Q))
 
 
-
-
-
-    
-
-
-def results():
-    results = solver.solve(model,tee=True, options = options)
-
-    def get_list(pyomo_var):
-        return list(pyomo_var.extract_values().values())
-
-
-    ################## Return results for next run ##################
-
-    SOC_end = get_list(model.SOC_BESS)[-1]
-
-    outputQ = pd.DataFrame({
-        'ID_buy': get_list(model.ID_buy),
-        'ID_sell': get_list(model.ID_sell),
-        'SOC_BESS': get_list(model.SOC_BESS),
-        'x_grid_out': get_list(model.x_grid_out),
-        'x_BESS_in': get_list(model.x_BESS_in),
-        'x_BESS_out': get_list(model.x_BESS_out),
-        'priceQ': model.pricesQ
-    })
-
-    outputH = pd.DataFrame({
-        'DA_buy': get_list(model.DA_buy),
-        'DA_sell': get_list(model.DA_sell),
-        'priceH': model.pricesH
-    })
-
-    outputH4 = pd.DataFrame({
-        'PCR': get_list(model.PCR),
-        'aFRR_pos': get_list(model.aFRR_pos),
-        'aFRR_neg': get_list(model.aFRR_neg),
-        'priceH4_PCR': model.pricesH4_PCR,
-        'priceH4_aFRR_pos': model.pricesH4_aFRR_pos,
-        'priceH4_aFRR_neg': model.pricesH4_aFRR_neg
-    })
-
-    return outputQ, outputH, outputH4
 
 
 
