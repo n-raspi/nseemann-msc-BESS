@@ -13,7 +13,7 @@ from import_data import import_data
 # combined_market_data = pd.read_csv('30_src/build_dataset/combined_market_data.csv', index_col=0, parse_dates=True)#, date_parser=date_parser)
 
 
-IP_p, DA_p, aFRR_p, PCR_p = import_data()
+DA_p, IP_p, aFRR_p, PCR_p = import_data()
 
 start_datetime = min(IP_p.index)
 print(start_datetime)
@@ -335,18 +335,21 @@ model = define_model()
 instance = define_instance(model)
 
 # outputQ, outputH, outputH4
+last_SOC = 0.5
 
-outputQ, outputH, outputH4 = run_instance(instance, 0.5,0)
-indexQ = [start_datetime + day*pd.to_timedelta('1day') + i*pd.to_timedelta('15min') for i in range(N_days*24*4)]
-indexH = [start_datetime + day*pd.to_timedelta('1day') + i*pd.to_timedelta('1h') for i in range(N_days*24)]
-indexH4 = [start_datetime + day*pd.to_timedelta('1day') + i*pd.to_timedelta('4h') for i in range(N_days*6)]
-outputQ.index = indexQ
-outputH.index = indexH
-outputH4.index = indexH4
+results_df = pd.DataFrame()
 
-output_window = pd.concat([outputQ,outputH,outputH4], axis=1)[start_datetime:start_datetime + N_days_fix*pd.to_timedelta('1day')-pd.to_timedelta('15min')]
-df = pd.DataFrame()
+for day in range(0,2):
+    outputQ, outputH, outputH4 = run_instance(instance, 0.5,day)
+    outputQ.index  = [start_datetime + day*pd.to_timedelta('1day') + i*pd.to_timedelta('15min') for i in range(N_days*24*4)]
+    outputH.index = [start_datetime + day*pd.to_timedelta('1day') + i*pd.to_timedelta('1h') for i in range(N_days*24)]
+    outputH4.index = [start_datetime + day*pd.to_timedelta('1day') + i*pd.to_timedelta('4h') for i in range(N_days*6)]
+    output_window = pd.concat([outputQ,outputH,outputH4], axis=1)[start_datetime + day*pd.to_timedelta('1day'):start_datetime + (N_days_fix + day)*pd.to_timedelta('1day')-pd.to_timedelta('15min')]
+    last_SOC = output_window.SOC_BESS.iloc[-1]
 
+    results_df = pd.concat([results_df, output_window])
+
+results_df.to_csv('results_test.csv')
 
 # # ID prices
 # instance.pricesQ = IP_p[shiftQ:shiftQ+len(model.Q)]
