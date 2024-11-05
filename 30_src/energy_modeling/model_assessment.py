@@ -6,6 +6,8 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
+from components import storage
+
 # import os
 # print(os.getcwd())
 
@@ -36,40 +38,33 @@ N_days = 3
 N_days_fix = 1
 day = 0
 
-outputQ = pd.DataFrame(columns=[
-        'ID_buy',
-        'ID_sell',
-        'SOC_BESS',
-        'x_grid_out',
-        'x_BESS_in',
-        'x_BESS_out',
-        'priceQ'
-])
 
-outputH = pd.DataFrame(columns=[
-    'DA_buy',
-    'DA_sell',
-    'priceH'
-])
+# Efficiency
+e_BESS = 0.9 # Battery efficiency
+SD_BESS = 0.01 # Self discharge rate of battery in %/quarterhour
 
-outputH4 = pd.DataFrame(columns=[
-    'PCR',
-    'aFRR_pos',
-    'aFRR_neg',
-    'priceH4_PCR',
-    'priceH4_aFRR_pos',
-    'priceH4_aFRR_neg'
-])
+BESS_capacity = 1 # MWh
+BESS_c_rate = 0.5 # C-rate of battery
 
+def define_model(N_days=3):
+    print('Starting model definition')
 
-def define_model():
+    ############## SETS ##############
+
     model = pyo.AbstractModel()
+
+    model.storage_units = pyo.Set()
 
     model.Q = pyo.RangeSet(0, N_days*24*4-1)
     model.H = pyo.RangeSet(0, N_days*24-1)
     model.H4 = pyo.RangeSet(0, N_days*6-1)  
-    # parameters to define and instantiate:
-     # ID prices
+
+
+    ############## PARAMETERS ##############
+
+    ############## Market parameters
+
+    # ID prices
     model.pricesQ = pyo.Param(model.Q, mutable=True)
 
     # DA prices
@@ -86,21 +81,24 @@ def define_model():
 
     # # Peak prices
     # model.p_peak = pyo.Param()
-
+    
     # # Emissions
     # model.emissions = pyo.Param(model.Q)
 
+    ############## Storage parameters
+
+    model.storage_capacity_MWh= pyo.Param(model.storage_units, mutable=True)
+    model.storage_max_charge_MW= pyo.Param(model.storage_units, mutable=False)
+    model.storage_max_discharge_MW= pyo.Param(model.storage_units, mutable=False)
+    model.storage_eff_charge= pyo.Param(model.storage_units, mutable=False)
+    model.storage_eff_discharge=pyo.Param(model.storage_units, mutable=False)
+    model.storage_SD=pyo.Param(model.storage_units, mutable=False)
+    model.storage_degradation_params=pyo.Param(model.storage_units, mutable=False)
+    model.storage_financial_params=pyo.Param(model.storage_units, mutable=False)
+    model.storage_CO2_params=pyo.Param(model.storage_units, mutable=False)
+
     # Start and end SOC
-    model.start_SOC = pyo.Param(mutable=True)
-
-    ## System data
-
-    # Efficiency
-    e_BESS = 0.9 # Battery efficiency
-    SD_BESS = 0.01 # Self discharge rate of battery in %/quarter-hour
-
-    BESS_capacity = 1 # MWh
-    BESS_c_rate = 0.5 # C-rate of battery
+    model.start_SOC = pyo.Param(model.storage_units,mutable=True)
 
     # PV prod
     PV_prod = np.zeros(len(model.Q)) #random.rand(len(model.Q))
@@ -109,43 +107,55 @@ def define_model():
     local_load = np.zeros(len(model.Q)) #np.random.rand(len(model.Q))
 
 
-    ## Main trading decision variables
+    ############## DECISION VARIABLES ##############
+
+    ############## Market participation variables
+
+    # Intraday trades
     model.ID_buy = pyo.Var(model.Q, within=pyo.PositiveReals, bounds = (0,100))
     model.ID_sell = pyo.Var(model.Q, within=pyo.PositiveReals, bounds = (0,100))
   
-    pyo.sum_product(model.ID_buy, model.pricesQ, index=model.ID_buy)
-
+    # Day-ahead trades
     model.DA_buy = pyo.Var(model.H, within=pyo.PositiveReals, bounds = (0,100))
     model.DA_sell = pyo.Var(model.H, within=pyo.PositiveReals, bounds = (0,100))
 
+    # PCR trades
     model.PCR = pyo.Var(model.H4, within=pyo.PositiveReals)
 
+    # aFRR capacity trades
     model.aFRR_pos = pyo.Var(model.H4, within=pyo.PositiveReals)#, initialize = 0)
     model.aFRR_neg = pyo.Var(model.H4, within=pyo.PositiveReals)#, initialize = 0)
 
-    # model.peak = pyo.Var(model.Q, within=pyo.PositiveReals)
+    # Peak power output
+    model.peak_x_grid_out = pyo.Var(model.Q, within=pyo.PositiveReals)
+    
+    ############## Flow variables
 
-    ## Supporting decision variables
-
-    # Decision flows in and out of components
-
+    # Grid flow, out means out of grid into node
     model.x_grid_out = pyo.Var(model.Q, within=pyo.Reals)#, bounds = (-0.1,0.1))
 
-    model.x_BESS_in = pyo.Var(model.Q, within=pyo.PositiveReals)#, bounds = (0,1))
-    model.x_BESS_out = pyo.Var(model.Q, within=pyo.PositiveReals)#, bounds = (0,1))
+    # Storage flow, out means out of grid into node
+    model.x_storage_in = pyo.Var(model.storage_units*model.Q, within=pyo.PositiveReals)#, bounds = (0,1))
+    model.x_storage_out = pyo.Var(model.storage_units*model.Q, within=pyo.PositiveReals)#, bounds = (0,1))
+    
+    # Storage state of charge
+    model.SOC_storage = pyo.Var(model.storage_units*model.Q, within=pyo.PositiveReals)
 
-    # model.x_supercap_in = pyo.Var(model.Q, within=pyo.PositiveReals)
-    # model.x_supercap_out = pyo.Var(model.Q, within=pyo.PositiveReals)
+    ############## CONSTRAINTS ##############
 
-    model.SOC_BESS = pyo.Var(model.Q, within=pyo.PositiveReals)
+    ############## Equilibrium constraints
 
-    ## Constraints
-
-    #  Equilibrium constraints (nodal and trade balancing)
-    model.node_in = pyo.Constraint(model.Q, rule = lambda model, q: 0 == PV_prod[q] - local_load[q]  + model.x_grid_out[q] + model.x_BESS_out[q] - model.x_BESS_in[q]) # + model.x_supercap_out[q] - model.x_supercap_in[q])
+    # Nodal equilibrium
+    model.node_in = pyo.Constraint(model.Q, rule = lambda model, q: 0 ==\
+                PV_prod[q]\
+                - local_load[q]\
+                + model.x_grid_out[q]\
+                + sum(model.x_storage_out[storage_unit,q] for storage_unit in model.storage_units)\
+                - sum(model.x_storage_in[storage_unit,q] for storage_unit in model.storage_units))
 
     # Financial balancing: net power from grid must be equal to aggregated trades on both markets. DA is hourly, so divided by 4.
     model.balancing_in = pyo.Constraint(model.Q, rule = lambda model, q: model.x_grid_out[q] == model.ID_buy[q] - model.ID_sell[q] + model.DA_buy[q//4]/4 - model.DA_sell[q//4]/4)
+
 
     # Big M constraint for simulaneous buying and selling:
     # Buying and selling simultaneously is not allowed: (ID_buy + DA_buy)*(ID_sell + DA_sell) = 0) 
@@ -154,35 +164,35 @@ def define_model():
     model.const_bigM_ID_sell = pyo.Constraint(model.Q, rule = lambda model, q: (model.ID_sell[q] + model.DA_sell[q//4]/4) <= M*model.y[q])
     model.const_bigM_ID_buy = pyo.Constraint(model.Q, rule = lambda model, q: (model.ID_buy[q] + model.DA_buy[q//4]/4) <= M*(1-model.y[q]))
 
+    ############## Storage-specific constraints
+
     # Storage continuity
-    def const_SOC_BESS(model, q):
+    def const_SOC_storage(model, storage_unit, q):
         if q == 0:
-            return model.SOC_BESS[q] == (1-SD_BESS)*(model.start_SOC + (e_BESS*(model.x_BESS_in[q])) - ((1/e_BESS)*model.x_BESS_out[q]))
+            return model.SOC_storage[storage_unit,q] == (1-model.storage_SD[storage_unit] )*(model.start_SOC[storage_unit] + (model.storage_eff_charge[storage_unit]*(model.x_storage_in[storage_unit,q])) - ((1/model.storage_eff_discharge[storage_unit])*model.x_storage_out[storage_unit,q]))
         else:
-            return model.SOC_BESS[q] == (1-SD_BESS)*(model.SOC_BESS[q-1] + (e_BESS*(model.x_BESS_in[q])) - ((1/e_BESS)*model.x_BESS_out[q]))
-    model.BESS_cont = pyo.Constraint(model.Q, rule = const_SOC_BESS)
+            return model.SOC_storage[storage_unit,q] == (1-model.storage_SD[storage_unit])*(model.SOC_storage[storage_unit,q-1] + (model.storage_eff_charge[storage_unit]*(model.x_storage_in[storage_unit,q])) - ((1/model.storage_eff_discharge[storage_unit])*model.x_storage_out[storage_unit,q]))
+    model.const_storage_cont = pyo.Constraint(model.storage_units*model.Q, rule = const_SOC_storage)
 
-    def end_SOC_BESS(model):
-        return model.SOC_BESS[len(model.Q)-1] == model.start_SOC
-    model.SOC_BESS_end = pyo.Constraint(rule = end_SOC_BESS)
+    # Fix the SOC at the last SOC of storage tech to the beginning SOC
+    def end_SOC_storage(model,storage_unit):
+        return model.SOC_storage[storage_unit, len(model.Q)-1] == model.start_SOC[storage_unit]
+    model.SOC_storage_end = pyo.Constraint(model.storage_units, rule = end_SOC_storage)
 
-    # BESS power
-    model.const_BESS_power_in = pyo.Constraint(model.Q, rule = lambda model, q: model.x_BESS_in[q] <= 0.5)# BESS_c_rate*BESS_capacity)
-    model.const_BESS_power_out = pyo.Constraint(model.Q, rule = lambda model, q: model.x_BESS_out[q] <= 0.5)# BESS_c_rate*BESS_capacity)
+    # Storage power limits for each storage unit
+    model.const_storage_power_in = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.x_storage_in[storage_unit,q] <= model.storage_max_charge_MW[storage_unit])# BESS_c_rate*BESS_capacity)
+    model.const_storage_power_out = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.x_storage_out[storage_unit,q] <= model.storage_max_discharge_MW[storage_unit])# BESS_c_rate*BESS_capacity)
 
-    # Supercap power
-    # model.const_supercap_power_in = pyo.Constraint(model.Q, rule = lambda model, q: model.x_supercap_in[q] <= 0.5)
-    # model.const_supercap_power_out = pyo.Constraint(model.Q, rule = lambda model, q: model.x_supercap_out[q] <= 0.5)
-
-
-    # SOC bidding limits (fix)
-    model.const_SOC_BESS_min_reg = pyo.Constraint(model.Q, rule = lambda model, q: model.SOC_BESS[q] >=  model.aFRR_pos[q//16]*1  + model.PCR[q//16]*0.5)
-    model.const_SOC_BESS_max_reg = pyo.Constraint(model.Q, rule = lambda model, q: model.SOC_BESS[q] <= BESS_capacity - model.aFRR_neg[q//16]*1 - model.PCR[q//16]*0.5)
+    # SOC limits with capacity bidding
+    model.const_SOC_tot_min_reg = pyo.Constraint(model.Q, rule = lambda model,  q: sum(model.SOC_storage[storage_unit,q] for storage_unit in model.storage_units) >=  model.aFRR_pos[q//16]*1  + model.PCR[q//16]*0.5)
+    model.const_SOC_tot_max_reg = pyo.Constraint(model.Q, rule = lambda model, q: sum(model.SOC_storage[storage_unit,q] for storage_unit in model.storage_units) <= sum(model.storage_capacity_MWh[storage_unit] for storage_unit in model.storage_units) - model.aFRR_neg[q//16]*1 - model.PCR[q//16]*0.5)
 
     # Peak constraint
-    # model.const_peak = pyo.Constraint(model.Q, rule = lambda model, q: model.peak[q] >= -1*model.x_grid_out[q])
+    model.const_peak = pyo.Constraint(model.Q, rule = lambda model, q: model.peak_x_grid_out[q] >= model.x_grid_out[q])
 
-    # Degradation here the constants, variables and constraints are defined together
+    ############## Storage degradation constraints 
+    ############## Constants, variables and constraints are defined together for now
+
     # n=5 # Number of segments
     # alpha = np.random.rand(5)
     # beta = np.random.rand(5)
@@ -217,7 +227,8 @@ def define_model():
     
 
     def obj_expression(model):
-        return pyo.sum_product(model.ID_buy, model.pricesQ, index=model.ID_buy) \
+        return \
+            + pyo.sum_product(model.ID_buy, model.pricesQ, index=model.ID_buy) \
             - pyo.sum_product(model.ID_sell, model.pricesQ, index=model.ID_buy)\
             + pyo.sum_product(model.DA_buy, model.pricesH, index=model.DA_buy)\
             - pyo.sum_product(model.DA_sell, model.pricesH, index=model.DA_buy)\
@@ -227,48 +238,35 @@ def define_model():
 
     model.obj = pyo.Objective(rule = obj_expression, sense = pyo.minimize)
 
+    print('Model definition done')
+
     return model
     
 
-
-    # print('Obj for exclusive buy/sell: '+ str(results['Problem'][0]['Upper bound']))
-    # print('DA_buy: '+ str(sum(model.DA_buy.extract_values().values())))
-    # print('DA_sell: '+ str(sum(model.DA_sell.extract_values().values())))
-
-    # print('ID_buy: '+ str(sum(model.ID_buy.extract_values().values())))
-    # print('ID_sell: '+ str(sum(model.ID_sell.extract_values().values())))
-
-    # print('Abs SOC change: ' + str(sum(abs(model.SOC_BESS.extract_values()[q] - model.SOC_BESS.extract_values()[q-1]) for q in model.Q if q > 0)))
-
-
-    # SOC = list(model.SOC_BESS.extract_values().values())
-    # print(SOC[0], SOC[-1])
-    # plt.plot(model.SOC_BESS.extract_values().values())
-    # plt.show()
-    # print('done')
-    # print(model.obj())
-
-    # pd.DataFrame(model.ID_buy.extract_values())
-
-def define_instance(model):
-    # def run_model(day, start_SOC):
+def define_instance(model, storage_units):
+    # is it necessary to define the parameters in the instance definition?
+    
     shiftQ = day*24*4 
     shiftH = day*24
     shiftH4 = day*6 
     instance = model.create_instance(
         data = {None:{
-            'pricesQ': dict(zip(model.Q, [IP_p[shiftQ+q] for q in model.Q])),
-            'pricesH': dict(zip(model.H, [DA_p[shiftH+h] for h in model.H])),
-            'pricesH4_PCR': dict(zip(model.H4, [PCR_p[shiftH4+h] for h in model.H4])),
-            'pricesH4_aFRR_pos': dict(zip(model.H4, [aFRRpos_p[shiftH4+h] for h in model.H4])),
-            'pricesH4_aFRR_neg': dict(zip(model.H4, [aFRRneg_p[shiftH4+h] for h in model.H4])),
-            'start_SOC': {None: 0.5}
+            'storage_units': {None: [i.name for i in storage_units]},
+            'start_SOC': dict(zip([i.name for i in storage_units],[0.5,0.5])),
+            'storage_capacity_MWh': dict(zip([i.name for i in storage_units],[i.capacity_MWh for i in storage_units])),
+            'storage_max_charge_MW': dict(zip([i.name for i in storage_units],[i.max_charge_MW for i in storage_units])),
+            'storage_max_discharge_MW': dict(zip([i.name for i in storage_units],[i.max_discharge_MW for i in storage_units])),
+            'storage_eff_charge': dict(zip([i.name for i in storage_units],[i.eff_charge for i in storage_units])),
+            'storage_eff_discharge': dict(zip([i.name for i in storage_units],[i.eff_discharge for i in storage_units])),
+            'storage_SD': dict(zip([i.name for i in storage_units],[i.SD for i in storage_units])),
+            'storage_degradation_params': dict(zip([i.name for i in storage_units],[i.degradation_params for i in storage_units])),
+            'storage_financial_params': dict(zip([i.name for i in storage_units],[i.financial_params for i in storage_units])),
+            'storage_CO2_params': dict(zip([i.name for i in storage_units],[i.CO2_params for i in storage_units]))
             }
         }
     )
     return instance
     
-
 def get_list(pyomo_var):
         return list(pyomo_var.extract_values().values())
 
@@ -276,8 +274,9 @@ def run_instance(instance, start_SOC, day):
     shiftQ = day*24*4 
     shiftH = day*24
     shiftH4 = day*6 
-    instance.start_SOC = start_SOC
 
+    for j in instance.storage_units:
+        instance.start_SOC[j] = start_SOC
     for q in instance.Q:
         instance.pricesQ[q] = IP_p[shiftQ + q]
     for h in instance.H:
@@ -296,23 +295,31 @@ def run_instance(instance, start_SOC, day):
     solver = pyo.SolverFactory('gurobi') 
     
     options = {
-        "MIPGap":  0.05,
+        "MIPGap":  0.005,
         "OutputFlag": 1
     }
+
+    print('Starting instance: ', day)
     solver.solve(instance,tee=True, options = options)
-    
+    print('Finished instance: ', day)
     # SOC_end = get_list(instance.SOC_BESS)[-1]
+
 
     outputQ = pd.DataFrame({
         'ID_buy': get_list(instance.ID_buy),
         'ID_sell': get_list(instance.ID_sell),
-        'SOC_BESS': get_list(instance.SOC_BESS),
         'x_grid_out': get_list(instance.x_grid_out),
-        'x_BESS_in': get_list(instance.x_BESS_in),
-        'x_BESS_out': get_list(instance.x_BESS_out),
         'priceQ': get_list(instance.pricesQ)
     })
 
+    outputQ_units = pd.DataFrame()
+
+    for i in storage_units:
+        outputQ_units['SOC_' + i.name] = list(instance.SOC_storage[i.name,:].value)
+        outputQ_units['x_' + i.name + '_in'] = list(instance.x_storage_in[i.name,:].value)
+        outputQ_units['x_' + i.name + '_out'] = list(instance.x_storage_out[i.name,:].value)
+
+    
     outputH = pd.DataFrame({
         'DA_buy': get_list(instance.DA_buy),
         'DA_sell': get_list(instance.DA_sell),
@@ -328,18 +335,51 @@ def run_instance(instance, start_SOC, day):
         'priceH4_aFRR_neg': get_list(instance.pricesH4_aFRR_neg)
     })
 
-    return outputQ, outputH, outputH4
+    return outputQ, outputQ_units, outputH, outputH4
 
+BESS = storage(
+    name='BESS',
+    capacity_MWh=1,
+    max_charge_MW=0.5,
+    max_discharge_MW=0.5,
+    eff_charge=0.90,
+    eff_discharge=0.90,
+    SD=0.01,#0.000007,
+    degradation_params = [(-0.0004969829179274153, 0.000274),\
+            (-0.0003433660423914995, 0.00023559578111602105),\
+            (-0.00019601832609530072, 0.00016192192296792166),\
+            (-5.963271358578449e-05, 5.963271358578449e-05)], # alpha, beta for each segment
+    financial_params=[0.1,0.1,0.1],
+    CO2_params=10)
+
+
+
+# SC = storage(
+#     name='SC',
+#     capacity_MWh=0.5,
+#     max_charge_MW=10,
+#     max_discharge_MW=10,
+#     eff_charge=0.95,
+#     eff_discharge=0.95,
+#     SD=0.000014,
+#     degradation_params=[0.1,0.1,0.1],
+#     financial_params=[0.1,0.1,0.1],
+#     CO2_params=10)
+
+storage_units = [BESS]#, SC]
 
 model = define_model()
-instance = define_instance(model)
+instance = define_instance(model,storage_units)
+
+# To get duals
+instance.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
 
 # outputQ, outputH, outputH4
 last_SOC = 0.5
 
 results_df = pd.DataFrame()
 
-for day in range(0,2):
+for day in range(0,1):
     outputQ, outputH, outputH4 = run_instance(instance, 0.5,day)
     outputQ.index  = [start_datetime + day*pd.to_timedelta('1day') + i*pd.to_timedelta('15min') for i in range(N_days*24*4)]
     outputH.index = [start_datetime + day*pd.to_timedelta('1day') + i*pd.to_timedelta('1h') for i in range(N_days*24)]
@@ -349,7 +389,7 @@ for day in range(0,2):
 
     results_df = pd.concat([results_df, output_window])
 
-results_df.to_csv('results_test.csv')
+# results_df.to_csv('results_test.csv')
 
 # # ID prices
 # instance.pricesQ = IP_p[shiftQ:shiftQ+len(model.Q)]
