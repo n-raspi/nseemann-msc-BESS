@@ -39,7 +39,7 @@ def import_data():
     start = max(DA.first_valid_index(), IP.first_valid_index(), aFRR_p.apply(lambda col: col.first_valid_index()).max(), FCR_p.first_valid_index())
     end = min(DA.last_valid_index(), IP.last_valid_index(), aFRR_p.apply(lambda col: col.last_valid_index()).min(), FCR_p.last_valid_index())
 
-    print(start,end)
+    # print(start,end)
 
     IP = IP[start:end][:-1]#.dropna()
     DA = DA[start:end][:-1]#.dropna()
