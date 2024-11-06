@@ -46,7 +46,7 @@ SD_BESS = 0.01 # Self discharge rate of battery in %/quarterhour
 BESS_capacity = 1 # MWh
 BESS_c_rate = 0.5 # C-rate of battery
 
-def define_model(N_days=3):
+def define_model(N_days=3, N_deg_segments = 5):
     print('Starting model definition')
 
     ############## SETS ##############
@@ -57,7 +57,9 @@ def define_model(N_days=3):
 
     model.Q = pyo.RangeSet(0, N_days*24*4-1)
     model.H = pyo.RangeSet(0, N_days*24-1)
-    model.H4 = pyo.RangeSet(0, N_days*6-1)  
+    model.H4 = pyo.RangeSet(0, N_days*6-1) 
+
+    model.deg_segments = pyo.RangeSet(0,N_deg_segments) 
 
 
     ############## PARAMETERS ##############
@@ -93,12 +95,17 @@ def define_model(N_days=3):
     model.storage_eff_charge= pyo.Param(model.storage_units, mutable=False)
     model.storage_eff_discharge=pyo.Param(model.storage_units, mutable=False)
     model.storage_SD=pyo.Param(model.storage_units, mutable=False)
-    model.storage_degradation_params=pyo.Param(model.storage_units, mutable=False)
-    model.storage_financial_params=pyo.Param(model.storage_units, mutable=False)
-    model.storage_CO2_params=pyo.Param(model.storage_units, mutable=False)
+    model.deg_sh = pyo.Param(model.storage_units)
+    model.deg_eqtn = pyo.Param(model.storage_units*['alpha','beta'])
+    #model.storage_financial_params=pyo.Param(model.storage_units, mutable=False)
+    #model.storage_CO2_params=pyo.Param(model.storage_units, mutable=False)
+
 
     # Start and end SOC
     model.start_SOC = pyo.Param(model.storage_units,mutable=True)
+
+    # Start and end degradation psi
+    model.start_psi = pyo.Param(model.storage_units)
 
     # PV prod
     PV_prod = np.zeros(len(model.Q)) #random.rand(len(model.Q))
@@ -193,38 +200,72 @@ def define_model(N_days=3):
     ############## Storage degradation constraints 
     ############## Constants, variables and constraints are defined together for now
 
-    # n=5 # Number of segments
-    # alpha = np.random.rand(5)
-    # beta = np.random.rand(5)
+    model.psi_j = pyo.Var(model.storage_units*model.Q*model.deg_segments, within=pyo.PositiveReals)
+    model.psi = pyo.Var(model.storage_units*model.Q, within=pyo.PositiveReals)
 
-    # model.wq = pyo.Var(model.Q, within=pyo.PositiveReals)
+    model.D = pyo.Var(model.storage_units*model.Q, within=pyo.PositiveReals)
 
-    # def const_deg_lin(model,q,j):
-    #     return model.wq[q] >= alpha[j]*model.SOC_BESS[q] + beta[j]
+    model.w = pyo.Var(model.storage_units*model.Q*model.deg_segments, within=pyo.Binary)
 
-    # model.const_deg_lin = pyo.Constraint(model.Q*pyo.RangeSet(0,n-1,1), rule = const_deg_lin)
+    # Bigger than all curves
+    # for all u,q,j
+    # psi[storage_unit,q] >= deg_eqtn[storage_unit,'alpha']*SOC[storage_unit,q] + deg_eqtn[storage_unit,'beta']
+    model.const_uqj_0 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: model.psi[storage_unit,q] >= model.deg_eqtn[storage_unit,'alpha']*model.SOC_storage[storage_unit,q] + model.deg_eqtn[storage_unit,'beta'])
 
-    # Dsh = 0.004 # Calendar degradation
+    # Within bounds
+    # for all u,q,j
+    # 0 <= psi_j[storage_unit,q,j] <= deg_sh[storage_unit] # >= 0 implied by variable definition
+    model.const_uqj_1 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: model.psi[storage_unit,q,j] <= model.deg_eqtn[storage_unit,'beta'])
 
-    # model.dq = pyo.Var(model.Q, within=pyo.PositiveReals)
+    # Binary linearization
+    # for all u,q,j
+    # psi_j[storage_unit,q,j] <= deg_eqtn[storage_unit,'beta']*w[storage_unit,q,j] 
+    model.const_uqj_2 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: model.psi[storage_unit,q,j] <= model.deg_eqtn[storage_unit,'beta']*w[storage_unit,q,j])
+ 
+    # for all u,q,j
+    # psi_j[storage_unit,q,j] <= (deg_eqtn[storage_unit,'alpha']*SOC[storage_unit,q]) + deg_eqtn[storage_unit,'beta']
+    model.const_uqj_3 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: model.psi[storage_unit,q,j] <= model.deg_eqtn[storage_unit,'alpha']*model.SOC_storage[storage_unit,q] + model.deg_eqtn[storage_unit,'beta'])
 
-    # def const_dq(model,q):
-    #     if q == 0:
-    #         return pyo.Constraint.Skip
-    #     else:
-    #         return model.dq[q] >= model.wq[q] - model.wq[q-1] + Dsh
-        
-    # def const_dq_dsh(model,q):
-    #     if q == 0:
-    #         return pyo.Constraint.Skip
-    #     else:
-    #         return model.dq[q] >= Dsh
+    # for all u,q,j
+    # psi_j[storage_unit,q,j] >= (deg_eqtn[storage_unit,'alpha']*SOC[storage_unit,q]) + deg_eqtn[storage_unit,'beta'] - deg_eqtn[storage_unit,'beta']*(1-w[storage_unit,q,j])
+    model.const_uqj_4 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: model.psi[storage_unit,q,j] >= model.deg_eqtn[storage_unit,'alpha']*model.SOC_storage[storage_unit,q] + model.deg_eqtn[storage_unit,'beta'] - model.deg_eqtn[storage_unit,'beta']*(1-w[storage_unit,q,j]))
 
-    # model.const_dq = pyo.Constraint(model.Q, rule = const_dq)
-    # model.const_dq_dsh = pyo.Constraint(model.Q, rule = const_dq_dsh)
+    # for all u,q
+    # psi[storage_unit,q] == sum(psi_j[storage_unit,q,j] for j in deg_segments)
+    model.const_uq_0 = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.psi[storage_unit,q] == sum(model.psi_j[storage_unit,q,j] for j in model.deg_segments))
 
-    # deg_total = sum(model.dq[q] for q in model.Q)
     
+    # for all u,q
+    # 1 == sum(w[storage_unit,q,j] for j in deg_segments)
+    model.const_uq_1 = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: 1 == sum(model.w[storage_unit,q,j] for j in model.deg_segments))
+
+    # Degradation
+
+    # for all u,q
+    # model.D[storage_unit,q] >= (psi[storage_unit,q] - psi[storage_unit,q-1])/2 
+    def const_uq_2(model, storage_unit, q):
+        if q == 0:
+            # psi at SOC = 0.5 is 6.39127599202713e-05, added parameter input
+            return model.D[storage_unit,q] >= (model.psi[storage_unit,q] - model.start_psi[storage_unit])/2
+        else:
+            return model.D[storage_unit,q] >= (model.psi[storage_unit,q] - model.psi[storage_unit,q-1])/2
+    model.const_uq_2 = pyo.Constraint(model.storage_units*model.Q, rule = const_uq_2)
+
+
+    # for all u,q
+    # model.D[storage_unit,q] >= (psi[storage_unit,q-1] - psi[storage_unit,q])/2 
+    def const_uq_3(model, storage_unit, q):
+        if q == 0:
+            return model.D[storage_unit,q] >= (model.start_psi[storage_unit] - model.psi[storage_unit,q])/2
+        else:
+            return model.D[storage_unit,q] >= (model.psi[storage_unit,q-1] - model.psi[storage_unit,q])/2
+    model.const_uq_3 = pyo.Constraint(model.storage_units*model.Q, rule = const_uq_3)
+
+    # for all u,q
+    # model.D[storage_unit,q] >= deg_sh[storage_unit]
+    model.const_uq_4 = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.D[storage_unit,q] >= model.deg_sh[storage_unit])
+
+    ############## OBJECTIVE FUNCTION ##############    
 
     def obj_expression(model):
         return \
@@ -234,7 +275,8 @@ def define_model(N_days=3):
             - pyo.sum_product(model.DA_sell, model.pricesH, index=model.DA_buy)\
             - pyo.sum_product(model.aFRR_pos, model.pricesH4_aFRR_pos, index=model.aFRR_pos)\
             - pyo.sum_product(model.aFRR_neg, model.pricesH4_aFRR_neg, index=model.aFRR_neg)\
-            - pyo.sum_product(model.PCR, model.pricesH4_PCR, index=model.PCR)  #  + pyo.sum_product(model.peak[q], p_peak) + pyo.sum_product(model.dq[q], emissions[q])
+            - pyo.sum_product(model.PCR, model.pricesH4_PCR, index=model.PCR)\
+            + sum(model.D[storage_unit,q] for storage_unit in model.storage_units for q in model.Q) #  + pyo.sum_product(model.peak[q], p_peak) + pyo.sum_product(model.dq[q], emissions[q])
 
     model.obj = pyo.Objective(rule = obj_expression, sense = pyo.minimize)
 
@@ -242,7 +284,6 @@ def define_model(N_days=3):
 
     return model
     
-
 def define_instance(model, storage_units):
     # is it necessary to define the parameters in the instance definition?
     
@@ -371,23 +412,21 @@ storage_units = [BESS]#, SC]
 model = define_model()
 instance = define_instance(model,storage_units)
 
-# To get duals
-instance.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
 
 # outputQ, outputH, outputH4
 last_SOC = 0.5
 
 results_df = pd.DataFrame()
 
-for day in range(0,1):
-    outputQ, outputH, outputH4 = run_instance(instance, 0.5,day)
-    outputQ.index  = [start_datetime + day*pd.to_timedelta('1day') + i*pd.to_timedelta('15min') for i in range(N_days*24*4)]
-    outputH.index = [start_datetime + day*pd.to_timedelta('1day') + i*pd.to_timedelta('1h') for i in range(N_days*24)]
-    outputH4.index = [start_datetime + day*pd.to_timedelta('1day') + i*pd.to_timedelta('4h') for i in range(N_days*6)]
-    output_window = pd.concat([outputQ,outputH,outputH4], axis=1)[start_datetime + day*pd.to_timedelta('1day'):start_datetime + (N_days_fix + day)*pd.to_timedelta('1day')-pd.to_timedelta('15min')]
-    last_SOC = output_window.SOC_BESS.iloc[-1]
+# for day in range(0,1):
+#     outputQ, outputH, outputH4 = run_instance(instance, 0.5,day)
+#     outputQ.index  = [start_datetime + day*pd.to_timedelta('1day') + i*pd.to_timedelta('15min') for i in range(N_days*24*4)]
+#     outputH.index = [start_datetime + day*pd.to_timedelta('1day') + i*pd.to_timedelta('1h') for i in range(N_days*24)]
+#     outputH4.index = [start_datetime + day*pd.to_timedelta('1day') + i*pd.to_timedelta('4h') for i in range(N_days*6)]
+#     output_window = pd.concat([outputQ,outputH,outputH4], axis=1)[start_datetime + day*pd.to_timedelta('1day'):start_datetime + (N_days_fix + day)*pd.to_timedelta('1day')-pd.to_timedelta('15min')]
+#     last_SOC = output_window.SOC_BESS.iloc[-1]
 
-    results_df = pd.concat([results_df, output_window])
+#     results_df = pd.concat([results_df, output_window])
 
 # results_df.to_csv('results_test.csv')
 
@@ -414,7 +453,8 @@ for day in range(0,1):
 
 
 
-
+if 1==1:
+    nic is gay
 
 
 
