@@ -46,7 +46,7 @@ SD_BESS = 0.01 # Self discharge rate of battery in %/quarterhour
 BESS_capacity = 1 # MWh
 BESS_c_rate = 0.5 # C-rate of battery
 
-def define_model(N_days=3, N_deg_segments = 5):
+def define_model(N_days=3, N_deg_segments = 4):
     print('Starting model definition')
 
     ############## SETS ##############
@@ -59,8 +59,7 @@ def define_model(N_days=3, N_deg_segments = 5):
     model.H = pyo.RangeSet(0, N_days*24-1)
     model.H4 = pyo.RangeSet(0, N_days*6-1) 
 
-    model.deg_segments = pyo.RangeSet(0,N_deg_segments) 
-
+    model.deg_segments = pyo.RangeSet(0,N_deg_segments-1)
 
     ############## PARAMETERS ##############
 
@@ -96,7 +95,7 @@ def define_model(N_days=3, N_deg_segments = 5):
     model.storage_eff_discharge=pyo.Param(model.storage_units, mutable=False)
     model.storage_SD=pyo.Param(model.storage_units, mutable=False)
     model.deg_sh = pyo.Param(model.storage_units)
-    model.deg_eqtn = pyo.Param(model.storage_units*['alpha','beta'])
+    model.deg_eqtn = pyo.Param(model.storage_units*model.deg_segments*['alpha','beta'])
     #model.storage_financial_params=pyo.Param(model.storage_units, mutable=False)
     #model.storage_CO2_params=pyo.Param(model.storage_units, mutable=False)
 
@@ -105,7 +104,7 @@ def define_model(N_days=3, N_deg_segments = 5):
     model.start_SOC = pyo.Param(model.storage_units,mutable=True)
 
     # Start and end degradation psi
-    model.start_psi = pyo.Param(model.storage_units)
+    model.start_psi = pyo.Param(model.storage_units, initialize = 0)
 
     # PV prod
     PV_prod = np.zeros(len(model.Q)) #random.rand(len(model.Q))
@@ -207,39 +206,40 @@ def define_model(N_days=3, N_deg_segments = 5):
 
     model.w = pyo.Var(model.storage_units*model.Q*model.deg_segments, within=pyo.Binary)
 
+    betabound = 0.01
+
     # Bigger than all curves
     # for all u,q,j
     # psi[storage_unit,q] >= deg_eqtn[storage_unit,'alpha']*SOC[storage_unit,q] + deg_eqtn[storage_unit,'beta']
-    model.const_uqj_0 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: model.psi[storage_unit,q] >= model.deg_eqtn[storage_unit,'alpha']*model.SOC_storage[storage_unit,q] + model.deg_eqtn[storage_unit,'beta'])
+    model.const_uqj_0 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: model.psi_j[storage_unit,q,j] >= model.deg_eqtn[storage_unit,j,'alpha']*model.SOC_storage[storage_unit,q] + model.deg_eqtn[storage_unit,j,'beta'])
 
     # Within bounds
     # for all u,q,j
     # 0 <= psi_j[storage_unit,q,j] <= deg_sh[storage_unit] # >= 0 implied by variable definition
-    model.const_uqj_1 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: model.psi[storage_unit,q,j] <= model.deg_eqtn[storage_unit,'beta'])
+    # model.const_uqj_1 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: model.psi_j[storage_unit,q,j] <= betabound)
 
     # Binary linearization
     # for all u,q,j
     # psi_j[storage_unit,q,j] <= deg_eqtn[storage_unit,'beta']*w[storage_unit,q,j] 
-    model.const_uqj_2 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: model.psi[storage_unit,q,j] <= model.deg_eqtn[storage_unit,'beta']*w[storage_unit,q,j])
+    model.const_uqj_2 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: model.psi_j[storage_unit,q,j] <= betabound*model.w[storage_unit,q,j])
  
     # for all u,q,j
     # psi_j[storage_unit,q,j] <= (deg_eqtn[storage_unit,'alpha']*SOC[storage_unit,q]) + deg_eqtn[storage_unit,'beta']
-    model.const_uqj_3 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: model.psi[storage_unit,q,j] <= model.deg_eqtn[storage_unit,'alpha']*model.SOC_storage[storage_unit,q] + model.deg_eqtn[storage_unit,'beta'])
+    # model.const_uqj_3 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: model.psi_j[storage_unit,q,j] <= model.deg_eqtn[storage_unit,j,'alpha']*model.SOC_storage[storage_unit,q] + model.deg_eqtn[storage_unit,j,'beta'])
 
     # for all u,q,j
     # psi_j[storage_unit,q,j] >= (deg_eqtn[storage_unit,'alpha']*SOC[storage_unit,q]) + deg_eqtn[storage_unit,'beta'] - deg_eqtn[storage_unit,'beta']*(1-w[storage_unit,q,j])
-    model.const_uqj_4 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: model.psi[storage_unit,q,j] >= model.deg_eqtn[storage_unit,'alpha']*model.SOC_storage[storage_unit,q] + model.deg_eqtn[storage_unit,'beta'] - model.deg_eqtn[storage_unit,'beta']*(1-w[storage_unit,q,j]))
+    # model.const_uqj_4 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: model.psi_j[storage_unit,q,j] >= model.deg_eqtn[storage_unit,j,'alpha']*model.SOC_storage[storage_unit,q] + model.deg_eqtn[storage_unit,j,'beta'] - betabound*(1-model.w[storage_unit,q,j]))
 
     # for all u,q
     # psi[storage_unit,q] == sum(psi_j[storage_unit,q,j] for j in deg_segments)
-    model.const_uq_0 = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.psi[storage_unit,q] == sum(model.psi_j[storage_unit,q,j] for j in model.deg_segments))
+    # model.const_uq_0 = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.psi[storage_unit,q] == sum(model.psi_j[storage_unit,q,j] for j in model.deg_segments))
 
     
     # for all u,q
     # 1 == sum(w[storage_unit,q,j] for j in deg_segments)
     model.const_uq_1 = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: 1 == sum(model.w[storage_unit,q,j] for j in model.deg_segments))
 
-    # Degradation
 
     # for all u,q
     # model.D[storage_unit,q] >= (psi[storage_unit,q] - psi[storage_unit,q-1])/2 
@@ -249,7 +249,7 @@ def define_model(N_days=3, N_deg_segments = 5):
             return model.D[storage_unit,q] >= (model.psi[storage_unit,q] - model.start_psi[storage_unit])/2
         else:
             return model.D[storage_unit,q] >= (model.psi[storage_unit,q] - model.psi[storage_unit,q-1])/2
-    model.const_uq_2 = pyo.Constraint(model.storage_units*model.Q, rule = const_uq_2)
+    # model.const_uq_2 = pyo.Constraint(model.storage_units*model.Q, rule = const_uq_2)
 
 
     # for all u,q
@@ -259,11 +259,11 @@ def define_model(N_days=3, N_deg_segments = 5):
             return model.D[storage_unit,q] >= (model.start_psi[storage_unit] - model.psi[storage_unit,q])/2
         else:
             return model.D[storage_unit,q] >= (model.psi[storage_unit,q-1] - model.psi[storage_unit,q])/2
-    model.const_uq_3 = pyo.Constraint(model.storage_units*model.Q, rule = const_uq_3)
+    # model.const_uq_3 = pyo.Constraint(model.storage_units*model.Q, rule = const_uq_3)
 
     # for all u,q
     # model.D[storage_unit,q] >= deg_sh[storage_unit]
-    model.const_uq_4 = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.D[storage_unit,q] >= model.deg_sh[storage_unit])
+    # model.const_uq_4 = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.D[storage_unit,q] >= model.deg_sh[storage_unit])
 
     ############## OBJECTIVE FUNCTION ##############    
 
@@ -275,8 +275,8 @@ def define_model(N_days=3, N_deg_segments = 5):
             - pyo.sum_product(model.DA_sell, model.pricesH, index=model.DA_buy)\
             - pyo.sum_product(model.aFRR_pos, model.pricesH4_aFRR_pos, index=model.aFRR_pos)\
             - pyo.sum_product(model.aFRR_neg, model.pricesH4_aFRR_neg, index=model.aFRR_neg)\
-            - pyo.sum_product(model.PCR, model.pricesH4_PCR, index=model.PCR)\
-            + sum(model.D[storage_unit,q] for storage_unit in model.storage_units for q in model.Q) #  + pyo.sum_product(model.peak[q], p_peak) + pyo.sum_product(model.dq[q], emissions[q])
+            - pyo.sum_product(model.PCR, model.pricesH4_PCR, index=model.PCR)
+            # + sum(model.D[storage_unit,q] for storage_unit in model.storage_units for q in model.Q) #  + pyo.sum_product(model.peak[q], p_peak) + pyo.sum_product(model.dq[q], emissions[q])
 
     model.obj = pyo.Objective(rule = obj_expression, sense = pyo.minimize)
 
@@ -286,7 +286,8 @@ def define_model(N_days=3, N_deg_segments = 5):
     
 def define_instance(model, storage_units):
     # is it necessary to define the parameters in the instance definition?
-    
+    # model.deg_eqtn = pyo.Param(model.storage_units*model.deg_segments*['alpha','beta'])
+
     shiftQ = day*24*4 
     shiftH = day*24
     shiftH4 = day*6 
@@ -300,9 +301,11 @@ def define_instance(model, storage_units):
             'storage_eff_charge': dict(zip([i.name for i in storage_units],[i.eff_charge for i in storage_units])),
             'storage_eff_discharge': dict(zip([i.name for i in storage_units],[i.eff_discharge for i in storage_units])),
             'storage_SD': dict(zip([i.name for i in storage_units],[i.SD for i in storage_units])),
-            'storage_degradation_params': dict(zip([i.name for i in storage_units],[i.degradation_params for i in storage_units])),
-            'storage_financial_params': dict(zip([i.name for i in storage_units],[i.financial_params for i in storage_units])),
-            'storage_CO2_params': dict(zip([i.name for i in storage_units],[i.CO2_params for i in storage_units]))
+            'deg_sh': dict(zip([i.name for i in storage_units],[i.degradation_sh for i in storage_units])),
+            'deg_eqtn':  {(unit.name, seg, param): value for unit in storage_units for seg, (alpha, beta) in enumerate(unit.degradation_eqtn) for param, value in zip(['alpha', 'beta'], [alpha, beta])},
+            #'storage_degradation_params': dict(zip([i.name for i in storage_units],[i.degradation_params for i in storage_units])),
+            # 'storage_financial_params': dict(zip([i.name for i in storage_units],[i.financial_params for i in storage_units])),
+            # 'storage_CO2_params': dict(zip([i.name for i in storage_units],[i.CO2_params for i in storage_units]))
             }
         }
     )
@@ -336,7 +339,7 @@ def run_instance(instance, start_SOC, day):
     solver = pyo.SolverFactory('gurobi') 
     
     options = {
-        "MIPGap":  0.005,
+        "MIPGap":  0.5, #0.005,
         "OutputFlag": 1
     }
 
@@ -386,10 +389,11 @@ BESS = storage(
     eff_charge=0.90,
     eff_discharge=0.90,
     SD=0.01,#0.000007,
-    degradation_params = [(-0.0004969829179274153, 0.000274),\
-            (-0.0003433660423914995, 0.00023559578111602105),\
-            (-0.00019601832609530072, 0.00016192192296792166),\
-            (-5.963271358578449e-05, 5.963271358578449e-05)], # alpha, beta for each segment
+    degradation_eqtn = [[0.0004969829179274153, 0.000274],\
+            [-0.0003433660423914995, 0.00023559578111602105],\
+            [-0.00019601832609530072, 0.00016192192296792166],\
+            [-5.963271358578449e-05, 5.963271358578449e-05]], # alpha, beta for each segment
+    degradation_sh=0.0001,
     financial_params=[0.1,0.1,0.1],
     CO2_params=10)
 
@@ -411,7 +415,7 @@ storage_units = [BESS]#, SC]
 
 model = define_model()
 instance = define_instance(model,storage_units)
-
+run_instance(instance, 0.5,day)
 
 # outputQ, outputH, outputH4
 last_SOC = 0.5
@@ -452,9 +456,6 @@ results_df = pd.DataFrame()
 # instance.emissions = np.random.rand(len(model.Q))
 
 
-
-if 1==1:
-    nic is gay
 
 
 
