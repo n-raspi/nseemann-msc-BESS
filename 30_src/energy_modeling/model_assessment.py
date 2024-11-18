@@ -22,6 +22,12 @@ DA_p, IP_p, aFRR_p, PCR_p = import_data()
 start_datetime = min(IP_p.index)
 print(start_datetime)
 
+chosen_start = pd.to_datetime('2023-01-01 00:00:00')
+DA_p = DA_p.loc[chosen_start:]
+IP_p = IP_p.loc[chosen_start:]
+aFRR_p = aFRR_p.loc[chosen_start:]
+PCR_p = PCR_p.loc[chosen_start:]
+
 # ## Market prices
 IP_p = IP_p.to_list()
 DA_p = DA_p.to_list()
@@ -36,17 +42,8 @@ aFRRneg_p = aFRR_p['aFRRneg_SMARD_15min_pP'].to_list()
 # - aFRR activation prices
 
 
-N_days = 5
-N_days_fix = 1
-day = 0
 
 
-# Efficiency
-e_BESS = 0.9 # Battery efficiency
-SD_BESS = 0.01 # Self discharge rate of battery in %/quarterhour
-
-BESS_capacity = 1 # MWh
-BESS_c_rate = 0.5 # C-rate of battery
 
 def define_model(N_days=3, N_deg_segments = 4):
     print('Starting model definition')
@@ -96,18 +93,17 @@ def define_model(N_days=3, N_deg_segments = 4):
     model.storage_eff_charge= pyo.Param(model.storage_units, mutable=False)
     model.storage_eff_discharge=pyo.Param(model.storage_units, mutable=False)
     model.storage_SD=pyo.Param(model.storage_units, mutable=False)
-    model.deg_sh = pyo.Param(model.storage_units)
-    model.deg_eqtn = pyo.Param(model.storage_units*model.deg_segments*['alpha','beta'])
-    model.storage_financial_params=pyo.Param(model.storage_units*['capcostdiff'], mutable=False)
+    model.deg_sh = pyo.Param(model.storage_units, mutable=False)
+    model.deg_eqtn = pyo.Param(model.storage_units*model.deg_segments*['alpha','beta'], mutable=False)
+    #model.storage_financial_params=pyo.Param(model.storage_units*['capcostdiff'], mutable=False)
     #model.storage_CO2_params=pyo.Param(model.storage_units, mutable=False)
 
 
     # Start and end SOC
     model.start_SOC = pyo.Param(model.storage_units,mutable=True)
-
     # Start and end degradation psi
-    model.start_psi = pyo.Param(model.storage_units, initialize = 0)
-    model.start_deg_cap = pyo.Param(model.storage_units, initialize = 0)
+    model.start_psi = pyo.Param(model.storage_units, initialize = 0, mutable=True)
+    model.start_deg_cap = pyo.Param(model.storage_units, initialize = 0, mutable=True)
 
     # PV prod
     PV_prod = np.zeros(len(model.Q)) #random.rand(len(model.Q))
@@ -146,7 +142,7 @@ def define_model(N_days=3, N_deg_segments = 4):
     model.x_storage_in = pyo.Var(model.storage_units*model.Q, within=pyo.PositiveReals)#, bounds = (0,1))
     model.x_storage_out = pyo.Var(model.storage_units*model.Q, within=pyo.PositiveReals)#, bounds = (0,1))
     
-    # Storage state of charge
+    # Storage state of charge in MWh
     model.SOC_storage = pyo.Var(model.storage_units*model.Q, within=pyo.PositiveReals)
 
     ############## CONSTRAINTS ##############
@@ -188,11 +184,11 @@ def define_model(N_days=3, N_deg_segments = 4):
     model.SOC_storage_end = pyo.Constraint(model.storage_units, rule = end_SOC_storage)
 
     # Storage power limits for each storage unit
-    model.const_storage_power_in = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.x_storage_in[storage_unit,q] <= model.storage_max_charge_MW[storage_unit])# BESS_c_rate*BESS_capacity)
-    model.const_storage_power_out = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.x_storage_out[storage_unit,q] <= model.storage_max_discharge_MW[storage_unit])# BESS_c_rate*BESS_capacity)
+    model.const_storage_power_in = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.x_storage_in[storage_unit,q]*4 <= model.storage_max_charge_MW[storage_unit])# BESS_c_rate*BESS_capacity)
+    model.const_storage_power_out = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.x_storage_out[storage_unit,q]*4 <= model.storage_max_discharge_MW[storage_unit])# BESS_c_rate*BESS_capacity)
 
     model.const_SOC_min = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.SOC_storage[storage_unit,q] >=  0)
-    model.const_SOC_max = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.SOC_storage[storage_unit,q] <= model.storage_capacity_MWh[storage_unit] - model.D)
+    model.const_SOC_max = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.SOC_storage[storage_unit,q] <= model.storage_capacity_MWh[storage_unit] - model.start_deg_cap[storage_unit])
 
     # SOC limits with capacity bidding
     model.const_SOC_tot_min_reg = pyo.Constraint(model.Q, rule = lambda model,  q: sum(model.SOC_storage[storage_unit,q] for storage_unit in model.storage_units) >=  model.aFRR_pos[q//16]*1  + model.PCR[q//16]*0.5)
@@ -226,7 +222,6 @@ def define_model(N_days=3, N_deg_segments = 4):
     # model.D[storage_unit,q] >= (psi[storage_unit,q] - psi[storage_unit,q-1])/2 
     def const_uq_2(model, storage_unit, q):
         if q == 0:
-            # psi at SOC = 0.5 is 6.39127599202713e-05, added parameter input
             return model.D[storage_unit,q] >= (model.psi[storage_unit,q] - model.start_psi[storage_unit])/2
         else:
             return model.D[storage_unit,q] >= (model.psi[storage_unit,q] - model.psi[storage_unit,q-1])/2
@@ -268,13 +263,10 @@ def define_instance(model, storage_units):
     # is it necessary to define the parameters in the instance definition?
     # model.deg_eqtn = pyo.Param(model.storage_units*model.deg_segments*['alpha','beta'])
 
-    shiftQ = day*24*4 
-    shiftH = day*24
-    shiftH4 = day*6 
     instance = model.create_instance(
         data = {None:{
             'storage_units': {None: [i.name for i in storage_units]},
-            'start_SOC': dict(zip([i.name for i in storage_units],[0.5,0.5])),
+            'start_SOC': dict(zip([i.name for i in storage_units],[0.5])),
             'storage_capacity_MWh': dict(zip([i.name for i in storage_units],[i.capacity_MWh for i in storage_units])),
             'storage_max_charge_MW': dict(zip([i.name for i in storage_units],[i.max_charge_MW for i in storage_units])),
             'storage_max_discharge_MW': dict(zip([i.name for i in storage_units],[i.max_discharge_MW for i in storage_units])),
@@ -283,7 +275,6 @@ def define_instance(model, storage_units):
             'storage_SD': dict(zip([i.name for i in storage_units],[i.SD for i in storage_units])),
             'deg_sh': dict(zip([i.name for i in storage_units],[i.degradation_sh for i in storage_units])),
             'deg_eqtn':  {(unit.name, seg, param): value for unit in storage_units for seg, (alpha, beta) in enumerate(unit.degradation_eqtn) for param, value in zip(['alpha', 'beta'], [alpha, beta])},
-            
             #'storage_degradation_params': dict(zip([i.name for i in storage_units],[i.degradation_params for i in storage_units])),
             # 'storage_financial_params': dict(zip([i.name for i in storage_units],[i.financial_params for i in storage_units])),
             # 'storage_CO2_params': dict(zip([i.name for i in storage_units],[i.CO2_params for i in storage_units]))
@@ -295,13 +286,16 @@ def define_instance(model, storage_units):
 def get_list(pyomo_var):
         return list(pyomo_var.extract_values().values())
 
-def run_instance(instance, start_SOC, day):
+
+def run_instance(instance, day, start_SOC, start_deg_cap, start_psi):
     shiftQ = day*24*4 
     shiftH = day*24
     shiftH4 = day*6 
 
     for j in instance.storage_units:
         instance.start_SOC[j] = start_SOC
+        instance.start_psi[j] = start_psi
+        instance.start_deg_cap[j] = start_deg_cap
     for q in instance.Q:
         instance.pricesQ[q] = IP_p[shiftQ + q]
     for h in instance.H:
@@ -322,7 +316,7 @@ def run_instance(instance, start_SOC, day):
     options = {
         "MIPGap":  0.05, #0.005,
         "OutputFlag": 1,
-        "TimeLimit": 60
+        #"TimeLimit": 60
     }
 
     print('Starting instance: ', day)
@@ -363,8 +357,15 @@ def run_instance(instance, start_SOC, day):
 
     return outputQ, outputQ_units, outputH, outputH4
 
+# Other misc. functions
+
 def multiply_nested_array(nested_array, multiplier):
     return [[element * multiplier for element in sub_array] for sub_array in nested_array]
+
+def psif(A,B,SOC):
+    return A* ((1-SOC)**B)
+
+# Setting up current instance and model
 
 cost_mult = 95000 # 95000 EUR/MWh
 
@@ -383,49 +384,50 @@ BESS = storage(
     max_discharge_MW=0.5,
     eff_charge=0.90,
     eff_discharge=0.90,
-    SD=0.00001,#0.000007,
+    SD=0.00001,
     degradation_eqtn = multiply_nested_array(deg_eqtn, cost_mult), # alpha, beta for each segment
     degradation_sh=cost_mult/lifetime,
     financial_params=[cost_mult],
     CO2_params=10)
 
 
-cost_mult_SC = 5000 # 95000 EUR/MWh
+# cost_mult_SC = 5000 # 95000 EUR/MWh
 
-lifetime_SC = 20*365*24*4 # 20 years in quarters
+# lifetime_SC = 20*365*24*4 # 20 years in quarters
 
-deg_eqtn_SC = [[-0.0004969829179274153, 0.000274],\
-            [-0.0003433660423914995, 0.00023559578111602105],\
-            [-0.00019601832609530072, 0.00016192192296792166],\
-            [-5.963271358578449e-05, 5.963271358578449e-05]]
+# deg_eqtn_SC = [[-0.0004969829179274153, 0.000274],\
+#             [-0.0003433660423914995, 0.00023559578111602105],\
+#             [-0.00019601832609530072, 0.00016192192296792166],\
+#             [-5.963271358578449e-05, 5.963271358578449e-05]]
 
-SC = storage(
-    name='SC',
-    capacity_MWh=0.5,
-    max_charge_MW=1,
-    max_discharge_MW=1,
-    eff_charge=0.95,
-    eff_discharge=0.95,
-    SD=0.00005,#0.000007,
-    degradation_eqtn = multiply_nested_array(deg_eqtn_SC, cost_mult_SC), # alpha, beta for each segment
-    degradation_sh=cost_mult_SC/lifetime_SC,
-    financial_params=[cost_mult_SC],
-    CO2_params=10)
+# SC = storage(
+#     name='SC',
+#     capacity_MWh=0.5,
+#     max_charge_MW=1,
+#     max_discharge_MW=1,
+#     eff_charge=0.95,
+#     eff_discharge=0.95,
+#     SD=0.00005,#0.000007,
+#     degradation_eqtn = multiply_nested_array(deg_eqtn_SC, cost_mult_SC), # alpha, beta for each segment
+#     degradation_sh=cost_mult_SC/lifetime_SC,
+#     financial_params=[cost_mult_SC],
+#     CO2_params=10)
 
 
-storage_units = [BESS, SC]
+storage_units = [BESS]#, SC]
+
+
+N_days = 2
+N_days_fix = 1
+day = 0
 
 model = define_model(N_days=2)
 instance = define_instance(model,storage_units)
-run_instance(instance, 0.5,day)
 
-# outputQ, outputH, outputH4
-last_SOC = 0.5
+results_instance = run_instance(instance, day, 0.5, 0, psif(0.000274, 2.1, 0.5))
+
 
 results_df = pd.DataFrame()
-
-def psif(A,B,SOC):
-    return A* ((1-SOC)**B)
 
 SOC = pyo.value(instance.SOC_storage['BESS',:])
 psi = pyo.value(instance.psi['BESS',:])
