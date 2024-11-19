@@ -4,10 +4,10 @@
 import numpy as np
 import pandas as pd
 
-def import_data():
+def import_data(csv_loc):
 
     date_parser = pd.to_datetime
-    combined_market_data = pd.read_csv('../build_dataset/combined_market_data.csv', index_col=0, parse_dates=True, date_parser=date_parser)
+    combined_market_data = pd.read_csv(csv_loc, index_col=0, parse_dates=True, date_parser=date_parser)
     # When debugging:
     # combined_market_data = pd.read_csv('nseemann-msc-BESS/30_src/build_dataset/combined_market_data.csv', index_col=0, parse_dates=True, date_parser=date_parser)
 
