@@ -1,0 +1,89 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36" version="24.8.4">
+  <diagram name="Page-1" id="H7OocQH3WVN6QxSBvJeX">
+    <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-44" value="" style="whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="401" y="300" width="249" height="530" as="geometry" />
+        </mxCell>
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-43" value="" style="whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="190" y="300" width="210" height="530" as="geometry" />
+        </mxCell>
+        <mxCell id="_ZPiPlZKCAFzhntVLiFg-1" value="" style="swimlane;html=1;childLayout=stackLayout;resizeParent=1;resizeParentMax=0;horizontal=1;startSize=20;horizontalStack=0;whiteSpace=wrap;swimlaneLine=1;" vertex="1" parent="1">
+          <mxGeometry x="171" y="120" width="479" height="710" as="geometry" />
+        </mxCell>
+        <mxCell id="_ZPiPlZKCAFzhntVLiFg-2" value="Data" style="swimlane;html=1;startSize=20;horizontal=0;" vertex="1" parent="_ZPiPlZKCAFzhntVLiFg-1">
+          <mxGeometry y="20" width="479" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-1" value="&lt;ul&gt;&lt;ul&gt;&lt;ul&gt;&lt;ul&gt;&lt;li&gt;&lt;span style=&quot;background-color: initial;&quot;&gt;Price DA&lt;/span&gt;&lt;/li&gt;&lt;li&gt;&lt;span style=&quot;background-color: initial;&quot;&gt;Price ID&lt;/span&gt;&lt;/li&gt;&lt;li&gt;&lt;span style=&quot;background-color: initial;&quot;&gt;Price FCR&lt;/span&gt;&lt;/li&gt;&lt;li&gt;Price aFRRc&lt;/li&gt;&lt;li&gt;Cost aFRRe&lt;/li&gt;&lt;li&gt;Activated aFRRe&lt;/li&gt;&lt;li&gt;Marginal CO2&lt;/li&gt;&lt;/ul&gt;&lt;/ul&gt;&lt;/ul&gt;&lt;/ul&gt;" style="shape=mxgraph.bpmn.data;labelPosition=left;verticalLabelPosition=middle;align=left;verticalAlign=middle;size=15;html=1;isCollection=1;" vertex="1" parent="_ZPiPlZKCAFzhntVLiFg-2">
+          <mxGeometry x="175" y="5" width="130" height="135" as="geometry" />
+        </mxCell>
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-3" value="&lt;ul&gt;&lt;ul&gt;&lt;ul&gt;&lt;ul&gt;&lt;li&gt;PV yield&lt;/li&gt;&lt;li&gt;Industrial load&lt;/li&gt;&lt;li&gt;Peak costs&lt;/li&gt;&lt;li&gt;Grid fees&lt;/li&gt;&lt;/ul&gt;&lt;/ul&gt;&lt;/ul&gt;&lt;/ul&gt;" style="shape=mxgraph.bpmn.data;labelPosition=left;verticalLabelPosition=middle;align=left;verticalAlign=middle;size=15;html=1;isCollection=1;" vertex="1" parent="_ZPiPlZKCAFzhntVLiFg-2">
+          <mxGeometry x="330" y="10" width="130" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-4" value="&lt;ul&gt;&lt;ul&gt;&lt;ul&gt;&lt;ul&gt;&lt;li&gt;ESS structure&lt;/li&gt;&lt;li&gt;(ESS sizing)&lt;/li&gt;&lt;li&gt;ESS aging&lt;/li&gt;&lt;li&gt;CAPEX&lt;/li&gt;&lt;li&gt;CO2 cost&lt;/li&gt;&lt;/ul&gt;&lt;/ul&gt;&lt;/ul&gt;&lt;/ul&gt;" style="shape=mxgraph.bpmn.data;labelPosition=left;verticalLabelPosition=middle;align=left;verticalAlign=middle;size=15;html=1;isCollection=1;noLabel=0;fixDash=0;container=0;dropTarget=0;part=0;" vertex="1" parent="_ZPiPlZKCAFzhntVLiFg-2">
+          <mxGeometry x="30" y="5" width="130" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="_ZPiPlZKCAFzhntVLiFg-3" value="Model" style="swimlane;html=1;startSize=20;horizontal=0;" vertex="1" parent="_ZPiPlZKCAFzhntVLiFg-1">
+          <mxGeometry y="180" width="479" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="_ZPiPlZKCAFzhntVLiFg-4" value="Decision variables" style="swimlane;html=1;startSize=20;horizontal=0;swimlaneLine=1;" vertex="1" parent="_ZPiPlZKCAFzhntVLiFg-1">
+          <mxGeometry y="300" width="479" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-6" value="&lt;p&gt;&lt;/p&gt;&lt;ul style=&quot;padding-left: 2px;&quot;&gt;&lt;li&gt;&lt;span style=&quot;font-size: 12px; background-color: initial;&quot;&gt;ESS sizing&lt;/span&gt;&lt;/li&gt;&lt;li&gt;&lt;span style=&quot;font-size: 12px;&quot;&gt;Peak demand&lt;/span&gt;&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;&lt;/p&gt;" style="points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];rounded=1;dashed=1;dashPattern=5 2 1 2;labelPosition=center;verticalLabelPosition=middle;align=center;verticalAlign=middle;fontSize=8;html=1;whiteSpace=wrap;" vertex="1" parent="_ZPiPlZKCAFzhntVLiFg-4">
+          <mxGeometry x="309" y="20" width="131" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-5" value="&lt;p&gt;&lt;/p&gt;&lt;ul style=&quot;padding-left: 2px;&quot;&gt;&lt;li&gt;&lt;span style=&quot;font-size: 12px;&quot;&gt;Market trades&lt;/span&gt;&lt;/li&gt;&lt;li&gt;&lt;span style=&quot;background-color: initial; font-size: 12px;&quot;&gt;ESS operation&lt;/span&gt;&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;&lt;/p&gt;" style="points=[[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0.25,0],[1,0.5,0],[1,0.75,0],[0.75,1,0],[0.5,1,0],[0.25,1,0],[0,0.75,0],[0,0.5,0],[0,0.25,0]];rounded=1;dashed=1;dashPattern=5 2 1 2;labelPosition=center;verticalLabelPosition=middle;align=center;verticalAlign=middle;fontSize=8;html=1;whiteSpace=wrap;" vertex="1" parent="_ZPiPlZKCAFzhntVLiFg-4">
+          <mxGeometry x="129" y="20" width="151" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="_ZPiPlZKCAFzhntVLiFg-5" value="Results" style="swimlane;html=1;startSize=20;horizontal=0;swimlaneLine=1;" vertex="1" parent="_ZPiPlZKCAFzhntVLiFg-1">
+          <mxGeometry y="420" width="479" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-46" value="&lt;ul style=&quot;padding-left: 0px;&quot;&gt;&lt;li&gt;Operation&lt;/li&gt;&lt;li&gt;Costs&lt;/li&gt;&lt;li&gt;Emissions&lt;/li&gt;&lt;/ul&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;dashed=0;" vertex="1" parent="_ZPiPlZKCAFzhntVLiFg-5">
+          <mxGeometry x="90" y="25" width="310" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-45" value="Analysis" style="swimlane;html=1;startSize=20;horizontal=0;swimlaneLine=1;" vertex="1" parent="_ZPiPlZKCAFzhntVLiFg-1">
+          <mxGeometry y="540" width="479" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-52" value="&lt;ul style=&quot;padding-left: 0px;&quot;&gt;&lt;li&gt;CO2-aware vs unaware&lt;/li&gt;&lt;li&gt;Market combinations&lt;/li&gt;&lt;li&gt;Tech combinations&lt;/li&gt;&lt;li&gt;Optimal BESS/SC capacities&lt;/li&gt;&lt;/ul&gt;" style="verticalLabelPosition=middle;verticalAlign=middle;html=1;shape=mxgraph.basic.plaque;dx=6;whiteSpace=wrap;labelPosition=center;align=center;" vertex="1" parent="Y0jZvqLdVTw9YHAPx3Wo-45">
+          <mxGeometry x="109" y="10" width="190" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-53" value="&lt;ul style=&quot;padding-left: 0px;&quot;&gt;&lt;li&gt;Optimal sizing&lt;/li&gt;&lt;/ul&gt;" style="verticalLabelPosition=middle;verticalAlign=middle;html=1;shape=mxgraph.basic.plaque;dx=6;whiteSpace=wrap;labelPosition=center;align=center;" vertex="1" parent="Y0jZvqLdVTw9YHAPx3Wo-45">
+          <mxGeometry x="330" y="10" width="129" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-54" value="&lt;div&gt;&lt;b&gt;Markets indicators analysis&lt;/b&gt;&lt;/div&gt;" style="verticalLabelPosition=middle;verticalAlign=middle;html=1;shape=mxgraph.basic.plaque;dx=6;whiteSpace=wrap;labelPosition=center;align=center;" vertex="1" parent="1">
+          <mxGeometry x="280" y="780" width="190" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-58" value="" style="group;shadow=0;fillColor=none;" connectable="0" vertex="1" parent="1">
+          <mxGeometry x="220" y="330" width="400" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-56" value="BTM model&lt;span style=&quot;white-space: pre;&quot;&gt;&#x9;&lt;/span&gt;&lt;span style=&quot;white-space: pre;&quot;&gt;&#x9;&lt;/span&gt;&lt;span style=&quot;white-space: pre;&quot;&gt;&#x9;&lt;/span&gt;" style="verticalLabelPosition=middle;verticalAlign=middle;html=1;shape=hexagon;perimeter=hexagonPerimeter2;arcSize=6;size=0.067;labelPosition=center;align=right;gradientColor=none;strokeOpacity=100;fillOpacity=50;" vertex="1" parent="Y0jZvqLdVTw9YHAPx3Wo-58">
+          <mxGeometry width="400" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-57" value="FTM model" style="verticalLabelPosition=middle;verticalAlign=middle;html=1;shape=hexagon;perimeter=hexagonPerimeter2;arcSize=6;size=0.2;labelPosition=center;align=center;fillOpacity=50;" vertex="1" parent="Y0jZvqLdVTw9YHAPx3Wo-58">
+          <mxGeometry width="130" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-41" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.697;entryY=-0.017;entryDx=0;entryDy=0;curved=0;entryPerimeter=0;" edge="1" parent="1" source="Y0jZvqLdVTw9YHAPx3Wo-3" target="Y0jZvqLdVTw9YHAPx3Wo-56">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="543.5" y="378.56999999999994" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-37" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;curved=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="Y0jZvqLdVTw9YHAPx3Wo-1" target="Y0jZvqLdVTw9YHAPx3Wo-57">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="311" y="340" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="411" y="290" />
+              <mxPoint x="285" y="290" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="Y0jZvqLdVTw9YHAPx3Wo-33" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;curved=0;" edge="1" parent="1" source="Y0jZvqLdVTw9YHAPx3Wo-4" target="Y0jZvqLdVTw9YHAPx3Wo-57">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="266" y="321.43000000000006" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
