@@ -17,7 +17,7 @@ from import_data import import_data
 # combined_market_data = pd.read_csv('30_src/build_dataset/combined_market_data.csv', index_col=0, parse_dates=True)#, date_parser=date_parser)
 
 
-DA_p, IP_p, aFRR_p, PCR_p = import_data('../build_dataset/combined_market_data.csv')
+DA, IP, aFRR_p, FCR_p, aFRR_E, aFRR_pE = import_data('../build_dataset/combined_market_data.csv')
 
 start_datetime = min(IP_p.index)
 print(start_datetime)
