@@ -22,7 +22,7 @@ DA_p, IP_p, aFRR_p, PCR_p, aFRR_E, aFRR_pE = import_data('/Users/nicolas/Documen
 start_datetime = min(IP_p.index)
 print(start_datetime)
 
-chosen_start = pd.to_datetime('2021-01-01 00:00:00')
+chosen_start = pd.to_datetime('2021-06-15 00:00:00')
 DA_p = DA_p.loc[chosen_start:]
 IP_p = IP_p.loc[chosen_start:]
 aFRR_p = aFRR_p.loc[chosen_start:]
@@ -216,33 +216,33 @@ def define_model(N_days=3, N_deg_segments = 4):
 
 
     ######### METHOD  WITH MULTIPLIED BINARY AND CONTINUOUS
-    # betabound = 200
+    betabound = 200
 
-#     model.const_uqj_0 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: model.psi[storage_unit,q] >= model.deg_eqtn[storage_unit,j,'alpha']*model.SOC_storage[storage_unit,q] + model.deg_eqtn[storage_unit,j,'beta'])
+    model.const_uqj_0 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: model.psi[storage_unit,q] >= model.deg_eqtn[storage_unit,j,'alpha']*model.SOC_storage[storage_unit,q] + model.deg_eqtn[storage_unit,j,'beta'])
 
-#     model.const_uqj_1 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: (model.w[storage_unit,q,j]*model.psi[storage_unit,q] - betabound*(1-model.w[storage_unit,q,j])) <= (model.deg_eqtn[storage_unit,j,'alpha']*model.SOC_storage[storage_unit,q] + model.deg_eqtn[storage_unit,j,'beta']))
+    model.const_uqj_1 = pyo.Constraint(model.storage_units*model.Q*model.deg_segments, rule = lambda model, storage_unit, q, j: (model.w[storage_unit,q,j]*model.psi[storage_unit,q] - betabound*(1-model.w[storage_unit,q,j])) <= (model.deg_eqtn[storage_unit,j,'alpha']*model.SOC_storage[storage_unit,q] + model.deg_eqtn[storage_unit,j,'beta']))
 
-#     model.const_uq_0 = pyo.Constraint(model.storage_units,model.Q, rule = lambda model, storage_unit, q: 1 == sum(model.w[storage_unit,q,j] for j in model.deg_segments))
+    model.const_uq_0 = pyo.Constraint(model.storage_units,model.Q, rule = lambda model, storage_unit, q: 1 == sum(model.w[storage_unit,q,j] for j in model.deg_segments))
 
-#  # for all u,q
-#     # model.D[storage_unit,q] >= (psi[storage_unit,q] - psi[storage_unit,q-1])/2 
-#     def const_uq_2(model, storage_unit, q):
-#         if q == 0:
-#             return model.D[storage_unit,q] >= (model.psi[storage_unit,q] - model.start_psi[storage_unit])/2
-#         else:
-#             return model.D[storage_unit,q] >= (model.psi[storage_unit,q] - model.psi[storage_unit,q-1])/2
-#     model.const_uq_2 = pyo.Constraint(model.storage_units*model.Q, rule = const_uq_2)
+ # for all u,q
+    # model.D[storage_unit,q] >= (psi[storage_unit,q] - psi[storage_unit,q-1])/2 
+    def const_uq_2(model, storage_unit, q):
+        if q == 0:
+            return model.D[storage_unit,q] >= (model.psi[storage_unit,q] - model.start_psi[storage_unit])/2
+        else:
+            return model.D[storage_unit,q] >= (model.psi[storage_unit,q] - model.psi[storage_unit,q-1])/2
+    model.const_uq_2 = pyo.Constraint(model.storage_units*model.Q, rule = const_uq_2)
 
-#     # for all u,q
-#     # model.D[storage_unit,q] >= (psi[storage_unit,q-1] - psi[storage_unit,q])/2 
-#     def const_uq_3(model, storage_unit, q):
-#         if q == 0:
-#             return model.D[storage_unit,q] >= (model.start_psi[storage_unit] - model.psi[storage_unit,q])/2
-#         else:
-#             return model.D[storage_unit,q] >= (model.psi[storage_unit,q-1] - model.psi[storage_unit,q])/2
-#     model.const_uq_3 = pyo.Constraint(model.storage_units*model.Q, rule = const_uq_3)
+    # for all u,q
+    # model.D[storage_unit,q] >= (psi[storage_unit,q-1] - psi[storage_unit,q])/2 
+    def const_uq_3(model, storage_unit, q):
+        if q == 0:
+            return model.D[storage_unit,q] >= (model.start_psi[storage_unit] - model.psi[storage_unit,q])/2
+        else:
+            return model.D[storage_unit,q] >= (model.psi[storage_unit,q-1] - model.psi[storage_unit,q])/2
+    model.const_uq_3 = pyo.Constraint(model.storage_units*model.Q, rule = const_uq_3)
 
-#     model.const_uq_4 = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.D[storage_unit,q] >= model.deg_sh[storage_unit])
+    model.const_uq_4 = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.D[storage_unit,q] >= model.deg_sh[storage_unit])
 
     ######### END METHOD  WITH MULTIPLIED BINARY AND CONTINUOUS
 
@@ -299,6 +299,7 @@ def define_model(N_days=3, N_deg_segments = 4):
  
     ############## OBJECTIVE FUNCTION ##############    
 
+    
     def obj_expression(model):
         return \
             + pyo.sum_product(model.ID_buy, model.pricesQ, index=model.ID_buy) \
@@ -307,9 +308,11 @@ def define_model(N_days=3, N_deg_segments = 4):
             - pyo.sum_product(model.DA_sell, model.pricesH, index=model.DA_buy)\
             - pyo.sum_product(model.aFRR_pos, model.pricesH4_aFRR_pos, index=model.aFRR_pos)\
             - pyo.sum_product(model.aFRR_neg, model.pricesH4_aFRR_neg, index=model.aFRR_neg)\
-            - pyo.sum_product(model.PCR, model.pricesH4_PCR, index=model.PCR)#\
-            #+ sum(model.D[storage_unit,q] for storage_unit in model.storage_units for q in model.Q) #  + pyo.sum_product(model.peak[q], p_peak) + pyo.sum_product(model.dq[q], emissions[q])
+            - pyo.sum_product(model.PCR, model.pricesH4_PCR, index=model.PCR)\
+            + sum(model.D[storage_unit,q] for storage_unit in model.storage_units for q in model.Q)
 
+            # + pyo.sum_product(model.peak[q], p_peak) + pyo.sum_product(model.dq[q], emissions[q])
+        
     model.obj = pyo.Objective(rule = obj_expression, sense = pyo.minimize)
 
     print('Model definition done')
@@ -424,7 +427,7 @@ def psif(A,B,SOC):
 
 # Setting up current instance and model
 
-cost_mult = 95000 # 95000 EUR/MWh
+cost_mult = 95000#95000 # 95000 EUR/MWh
 
 lifetime = 20*365*24*4 # 20 years in quarters
 
@@ -474,15 +477,15 @@ BESS = storage(
 storage_units = [BESS]#, SC]
 
 # Number of days simulated
-N_days = 2
+N_days = 1
 
 # Number of days outputted
-N_days_fix = 2
+N_days_fix = 1
 
 # First day of simulation =  "chosen_start" + "day". e.g. if chosen_start is 2023-01-01 and day is 1, the simulation starts at 2023-01-02
 day = 0
 
-model = define_model(N_days=2)
+model = define_model(N_days=N_days)
 instance = define_instance(model,storage_units)
 
 # results_instance = run_instance(instance, day, 0.5, 0, 95000*psif(0.000274, 2.1, 0.5))
@@ -499,7 +502,7 @@ for day in range(0,1):
     output_window = pd.concat([outputQ,outputQ_units,outputH,outputH4], axis=1)[chosen_start + day*pd.to_timedelta('1day'):chosen_start + (N_days_fix + day)*pd.to_timedelta('1day')-pd.to_timedelta('15min')]
     last_SOC = output_window.SOC_BESS.iloc[-1]
     results_df = pd.concat([results_df, output_window])
-    results_df.to_csv('all_markets_results_1041.csv')
+    results_df.to_csv('all_markets_results_new.csv')
     print(pyo.value(instance.obj))
 
 # fig = px.line()
