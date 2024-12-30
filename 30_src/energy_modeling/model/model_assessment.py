@@ -44,8 +44,7 @@ aFRRneg_p = aFRR_p['aFRRneg_SMARD_15min_pP'].to_list()
 
 
 
-
-def define_model(N_days=3, N_deg_segments = 4):
+def define_model(N_days=3, N_deg_segments = 4, cont_rest = True):
     print('Starting model definition')
 
     ############## SETS ##############
@@ -124,11 +123,19 @@ def define_model(N_days=3, N_deg_segments = 4):
     model.DA_sell = pyo.Var(model.H, within=pyo.PositiveReals, bounds = (0,100))
 
     # PCR trades
-    model.PCR = pyo.Var(model.H4, within=pyo.PositiveReals)
+    if cont_rest:
+        model.PCR = pyo.Var(model.H4, within=pyo.PositiveReals, bounds = (0,100))
+    else:
+        model.PCR = pyo.Var(model.H4, within=pyo.NonNegativeIntegers, bounds = (0,100))
+
 
     # aFRR capacity trades
-    model.aFRR_pos = pyo.Var(model.H4, within=pyo.PositiveReals)#, initialize = 0)
-    model.aFRR_neg = pyo.Var(model.H4, within=pyo.PositiveReals)#, initialize = 0)
+    if cont_rest:
+        model.aFRR_pos = pyo.Var(model.H4, within=pyo.PositiveReals)#, initialize = 0)
+        model.aFRR_neg = pyo.Var(model.H4, within=pyo.PositiveReals)#, initialize = 0)
+    else:
+        model.aFRR_pos = pyo.Var(model.H4, within=pyo.NonNegativeIntegers)#, initialize = 0)
+        model.aFRR_neg = pyo.Var(model.H4, within=pyo.NonNegativeIntegers)#, initialize = 0)
 
     # Peak power output
     model.peak_x_grid_out = pyo.Var(model.Q, within=pyo.PositiveReals)
@@ -298,8 +305,13 @@ def define_model(N_days=3, N_deg_segments = 4):
 #     model.const_uq_40 = pyo.Constraint(model.storage_units*model.Q, rule = lambda model, storage_unit, q: model.D[storage_unit,q] >= model.deg_sh[storage_unit])
  
     ############## OBJECTIVE FUNCTION ##############    
-
-    
+    # cost_co2 = 140 # EUR/tonCO2
+    # co2_mwh = 60 # tonCO2/MWh
+    # em_fact = pd.read_csv('/Users/nicolas/Documents/GitHub/nseemann-msc-BESS/dev_OOP/20_data/electricity_maps/DE_2021_hourly.csv')
+    # em_fact.index = pd.to_datetime(em_fact['Datetime (UTC)'])#.set_index('Datetime (UTC)')
+    # em_fact = em_fact['Carbon Intensity gCO₂eq/kWh (LCA)'][chosen_start:chosen_start+pd.to_timedelta('1day')-pd.to_timedelta('15min')].to_list()
+    # em_fact = [i*cost_co2/1000 for i in em_fact]
+    # em_fact_q = [em_fact[q//4] for q in model.Q]
     def obj_expression(model):
         return \
             + pyo.sum_product(model.ID_buy, model.pricesQ, index=model.ID_buy) \
@@ -309,8 +321,12 @@ def define_model(N_days=3, N_deg_segments = 4):
             - pyo.sum_product(model.aFRR_pos, model.pricesH4_aFRR_pos, index=model.aFRR_pos)\
             - pyo.sum_product(model.aFRR_neg, model.pricesH4_aFRR_neg, index=model.aFRR_neg)\
             - pyo.sum_product(model.PCR, model.pricesH4_PCR, index=model.PCR)\
-            + sum(model.D[storage_unit,q] for storage_unit in model.storage_units for q in model.Q)
-
+            + sum(model.D[storage_unit,q] for storage_unit in model.storage_units for q in model.Q)#\
+            #+ pyo.sum_product(model.DA_buy, em_fact, index=model.DA_buy)\
+            #- pyo.sum_product(model.DA_sell, em_fact, index=model.DA_buy)\
+            #+ pyo.sum_product(model.ID_buy, em_fact_q, index=model.ID_buy)\
+            #- pyo.sum_product(model.ID_sell, em_fact_q, index=model.ID_buy)\
+            #+ sum(cost_co2*co2_mwh*model.D[storage_unit,q]/95000 for storage_unit in model.storage_units for q in model.Q)
             # + pyo.sum_product(model.peak[q], p_peak) + pyo.sum_product(model.dq[q], emissions[q])
         
     model.obj = pyo.Objective(rule = obj_expression, sense = pyo.minimize)
@@ -374,7 +390,7 @@ def run_instance(instance, day, start_SOC, start_deg_cap, start_psi):
     solver = pyo.SolverFactory('gurobi') 
     
     options = {
-        "MIPGap":  0.001, #0.005,
+        "MIPGap":  0.01, #0.005,
         "OutputFlag": 1,
         #"TimeLimit": 60
     }
@@ -482,10 +498,10 @@ N_days = 1
 # Number of days outputted
 N_days_fix = 1
 
-# First day of simulation =  "chosen_start" + "day". e.g. if chosen_start is 2023-01-01 and day is 1, the simulation starts at 2023-01-02
-day = 0
+# First day of simulation =  "chosen_start" + "day". e.g. if chosen_start is 2021-01-01 and day is 1, the simulation starts at 2021-01-02
+day = 300
 
-model = define_model(N_days=N_days)
+model = define_model(N_days=N_days, cont_rest=False)
 instance = define_instance(model,storage_units)
 
 # results_instance = run_instance(instance, day, 0.5, 0, 95000*psif(0.000274, 2.1, 0.5))
@@ -493,7 +509,7 @@ instance = define_instance(model,storage_units)
 results_df = pd.DataFrame()
 
 
-for day in range(0,1):
+for day in range(day,day+1):
     outputQ, outputQ_units, outputH, outputH4 = run_instance(instance, day, 0.5, 0, 95000*psif(0.000274, 2.1, 0.5))
     outputQ.index  = [chosen_start + day*pd.to_timedelta('1day') + i*pd.to_timedelta('15min') for i in range(N_days*24*4)]
     outputQ_units.index  = [chosen_start + day*pd.to_timedelta('1day') + i*pd.to_timedelta('15min') for i in range(N_days*24*4)]
